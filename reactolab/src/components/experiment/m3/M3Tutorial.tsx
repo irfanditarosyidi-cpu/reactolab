@@ -22,7 +22,7 @@ const STEPS = [
   {
     icon: Thermometer,
     title: "Pilih suhu",
-    text: "Ketuk salah satu suhu yang sudah kamu tentukan.",
+    text: "Pilih salah satu suhu melalui dropdown di atas layar simulasi.",
   },
   {
     icon: Flame,
@@ -37,12 +37,12 @@ const STEPS = [
   {
     icon: Eye,
     title: "Lihat dari atas",
-    text: "Ketuk tombol mata agar kamera tepat di atas gelas reaksi untuk mengamati tanda X.",
+    text: "Gunakan tombol mata tepat di bawah layar agar kamera berada di atas gelas reaksi.",
   },
   {
     icon: Square,
     title: "Stop saat X hilang",
-    text: "Tekan Stop — X tidak terlihat sesuai pengamatanmu; waktu tercatat otomatis.",
+    text: "Tekan Stop saat tanda X tidak lagi terlihat; waktu tercatat otomatis.",
   },
   {
     icon: Atom,

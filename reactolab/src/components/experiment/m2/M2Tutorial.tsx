@@ -22,7 +22,7 @@ const STEPS = [
   {
     icon: Cuboid,
     title: "Pilih bentuk zat padat",
-    text: "Ketuk salah satu bentuk CaCO₃ yang kamu pilih; massanya sama.",
+    text: "Pilih bentuk CaCO₃ melalui dropdown di atas layar simulasi; massanya tetap sama.",
   },
   {
     icon: ArrowDownToLine,

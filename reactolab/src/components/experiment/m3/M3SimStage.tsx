@@ -2,30 +2,24 @@
 
 // Module 3 — simulation orchestrator (mobile-first, minimal UI).
 //
-// Per temperature: pick chip → "Atur Suhu" (both solutions equilibrate to the
+// Per temperature: choose from the dropdown → "Atur Suhu" (both solutions equilibrate to the
 // target; status "Siap dicampurkan") → "Campurkan" (pour animation, stopwatch
 // starts automatically) → the mixture clouds up at a temperature-dependent
-// rate → the student presses "Stop — X tidak terlihat" → time recorded.
+// rate → the student presses "Stop" when X is no longer visible → time recorded.
 // "Perbesar" swaps the stage to the particle view with a Maxwell–Boltzmann
 // panel; tested temperatures can be compared side by side.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Atom,
-  Beaker,
   Check,
   Circle,
   CircleHelp,
   Eye,
-  Minus,
-  Plus,
   RotateCcw,
-  Square,
-  Thermometer,
-  Undo2,
   Zap,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { Label, Select } from "@/components/ui/forms";
 import { cn } from "@/lib/utils";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
@@ -79,7 +73,6 @@ export default function M3SimStage({
   const [micro, setMicro] = useState(false);
   const [microTemp, setMicroTemp] = useState(parseFloat(ordered[0] ?? "25") || 25);
   const [topView, setTopView] = useState(false);
-  const [zoom, setZoom] = useState(1);
   const [stats, setStats] = useState<M3Stats>({ effective: 0, ineffective: 0 });
   const [hint, setHintState] = useState<Hint | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(!tutorialSeen && !readOnly);
@@ -276,18 +269,6 @@ export default function M3SimStage({
     sharedRef.current.topView = next;
     setTopView(next);
   };
-  const changeZoom = (dir: number) => {
-    const next = Math.min(1.6, Math.max(0.65, Math.round((zoom + dir * 0.15) * 100) / 100));
-    sharedRef.current.zoom = next;
-    setZoom(next);
-  };
-  const resetView = () => {
-    sharedRef.current.zoom = 1;
-    sharedRef.current.topView = false;
-    sharedRef.current.viewResetToken += 1;
-    setZoom(1);
-    setTopView(false);
-  };
 
   const closeTutorial = (completed: boolean) => {
     setTutorialOpen(false);
@@ -306,146 +287,137 @@ export default function M3SimStage({
     return Array.from(set).sort((a, b) => a - b);
   }, [ordered, runs, temp]);
 
-  const statusPill =
+  const statusLabel =
     phase === "heating"
-      ? { text: "Menyesuaikan suhu…", cls: "bg-amber-500 text-white" }
+      ? "Menyesuaikan suhu…"
       : phase === "ready"
-        ? { text: "Siap dicampurkan", cls: "bg-emerald-600 text-white" }
+        ? "Siap dicampurkan"
         : phase === "pouring"
-          ? { text: "Menuang…", cls: "bg-sky-600 text-white" }
-          : phase === "done"
-            ? { text: "Tercatat", cls: "bg-emerald-600 text-white" }
-            : null;
+          ? "Menuang…"
+          : phase === "reacting"
+            ? "Reaksi berlangsung"
+            : phase === "done"
+              ? "Data tercatat"
+              : currentRun
+                ? "Data sudah tersimpan"
+                : "Siap dimulai";
 
   const primary =
     phase === "idle"
-      ? { label: "Atur Suhu", icon: Thermometer, disabled: !param, cls: "" }
+      ? { label: "Atur Suhu", disabled: !param, cls: "" }
       : phase === "heating"
-        ? { label: "Menyesuaikan…", icon: Thermometer, disabled: true, cls: "" }
+        ? { label: "Menyesuaikan…", disabled: true, cls: "" }
         : phase === "ready"
-          ? { label: "Campurkan", icon: Beaker, disabled: false, cls: "" }
+          ? { label: "Campurkan", disabled: false, cls: "" }
           : phase === "pouring"
-            ? { label: "Menuang…", icon: Beaker, disabled: true, cls: "" }
+            ? { label: "Menuang…", disabled: true, cls: "" }
             : phase === "reacting"
-              ? { label: "Stop — X tidak terlihat", icon: Square, disabled: false, cls: "!bg-rose-600 hover:!bg-rose-700" }
-              : { label: "Tercatat", icon: Check, disabled: true, cls: "" };
-  const PrimaryIcon = primary.icon;
+              ? { label: "Stop", disabled: false, cls: "!bg-rose-600 hover:!bg-rose-700" }
+              : { label: "Tercatat", disabled: true, cls: "" };
 
   return (
     <div className="space-y-3">
-      <div className={cn("grid gap-3", micro && "lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start")}>
-        {/* ---------------- 3D stage ---------------- */}
-        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="relative h-[88vw] max-h-[460px] min-h-[320px] sm:h-[380px] lg:h-[440px]">
-            <M3Scene3D shared={sharedRef} micro={micro} onStats={setStats} className="absolute inset-0" />
-
-            {/* temperature + status (top-left) */}
-            <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2 pr-16">
-              <span className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-sm font-black tabular-nums text-slate-900 shadow-sm backdrop-blur">
-                {micro ? tempLabel(microTemp) : param ? tempLabel(temp) : "—"}
-              </span>
-              {!micro && statusPill && (
-                <span className={cn("rounded-full px-3 py-1.5 text-xs font-black shadow", statusPill.cls)}>
-                  {statusPill.text}
-                </span>
-              )}
-            </div>
-
-            {/* tutorial (top-right) */}
-            <button
-              type="button"
-              onClick={() => {
-                setTutorialMandatory(false);
-                setTutorialOpen(true);
-              }}
-              aria-label="Lihat tutorial"
-              className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-brand-700 shadow-sm backdrop-blur hover:bg-white"
+      {/* ---------------- temperature selector ---------------- */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Label htmlFor="m3-temperature" className="text-xs">
+              Pilih suhu pengamatan
+            </Label>
+            <Select
+              id="m3-temperature"
+              value={param}
+              onChange={(event) => selectParam(event.target.value)}
+              disabled={
+                phase === "heating" ||
+                phase === "pouring" ||
+                phase === "reacting" ||
+                ordered.length === 0
+              }
+              aria-describedby="m3-temperature-progress"
+              className="min-h-11 bg-white font-bold"
             >
-              <CircleHelp className="h-5 w-5" />
-            </button>
+              {ordered.length === 0 && <option value="">Tidak ada suhu terpilih</option>}
+              {ordered.map((value) => (
+                <option key={value} value={value}>
+                  {tempLabel(parseFloat(value))}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTutorialMandatory(false);
+              setTutorialOpen(true);
+            }}
+            aria-label="Lihat tutorial"
+            title="Lihat tutorial"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-brand-700 transition-colors hover:border-brand-300 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            <CircleHelp className="h-5 w-5" />
+          </button>
+        </div>
+        <div
+          id="m3-temperature-progress"
+          className="mt-2 flex items-center justify-between gap-3 text-[11px] font-semibold text-slate-500"
+        >
+          <span>Ganti suhu sebelum memulai percobaan berikutnya.</span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-emerald-700">
+            <Check className="h-3.5 w-3.5" /> {completedCount}/{ordered.length} selesai
+          </span>
+        </div>
+      </div>
 
-            {/* camera controls (top row under "?", macro only — keeps the apparatus clear) */}
-            {!micro && (
-              <div className="absolute right-3 top-16 flex flex-row gap-1.5">
-                <button
-                  type="button"
-                  onClick={toggleTopView}
-                  aria-pressed={topView}
-                  aria-label="Lihat dari atas"
-                  title="Lihat dari Atas"
-                  className={cn(
-                    "flex h-11 w-11 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-colors",
-                    topView ? "border-brand-600 bg-brand-600 text-white" : "border-white/80 bg-white/90 text-slate-700 hover:bg-white"
-                  )}
-                >
-                  <Eye className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => changeZoom(-1)}
-                  aria-label="Perbesar tampilan"
-                  title="Zoom in"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-700 shadow-sm backdrop-blur hover:bg-white"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => changeZoom(1)}
-                  aria-label="Perkecil tampilan"
-                  title="Zoom out"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-700 shadow-sm backdrop-blur hover:bg-white"
-                >
-                  <Minus className="h-5 w-5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={resetView}
-                  aria-label="Reset tampilan kamera"
-                  title="Reset View"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-slate-700 shadow-sm backdrop-blur hover:bg-white"
-                >
-                  <Undo2 className="h-5 w-5" />
-                </button>
-              </div>
-            )}
-
-            {/* readouts (bottom-left) */}
-            <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col items-start gap-1.5">
-              {micro ? (
-                <>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-black tabular-nums text-amber-950 shadow">
-                    <Zap className="h-3.5 w-3.5" /> {stats.effective}
-                    <span className="font-semibold opacity-80">efektif</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-black tabular-nums text-slate-700 shadow backdrop-blur">
-                    <Circle className="h-3.5 w-3.5 text-slate-400" /> {stats.ineffective}
-                    <span className="font-semibold opacity-80">tidak</span>
-                  </span>
-                </>
-              ) : (
-                (phase === "reacting" || phase === "done") && (
-                  <span className="inline-flex items-baseline gap-1 rounded-2xl bg-slate-950 px-3.5 py-2 text-white shadow">
-                    <span className="font-mono text-2xl font-black tabular-nums leading-none">{fmtSeconds(elapsedUi)}</span>
-                    <span className="text-xs font-bold text-slate-300">s</span>
-                  </span>
-                )
-              )}
+      <div className={cn("grid gap-3", micro && "lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start")}>
+        <div className="space-y-2">
+          {/* ---------------- 3D stage ---------------- */}
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="relative h-[88vw] max-h-[460px] min-h-[320px] sm:h-[380px] lg:h-[440px]">
+              <M3Scene3D shared={sharedRef} micro={micro} onStats={setStats} className="absolute inset-0" />
             </div>
+          </div>
 
-            {/* Perbesar toggle (bottom-right) */}
-            <button
+          {/* ---------------- stage toolbar ---------------- */}
+          <div className="flex w-full items-center gap-1.5 sm:gap-2">
+            <Button
+              size="sm"
+              disabled={primary.disabled}
+              onClick={primaryAction}
+              className={cn(
+                "h-10 min-w-0 flex-1 whitespace-nowrap px-2 text-xs sm:h-11 sm:px-4 sm:text-sm",
+                primary.cls
+              )}
+            >
+              {primary.label}
+            </Button>
+            {!micro && (
+              <button
+                type="button"
+                onClick={toggleTopView}
+                aria-pressed={topView}
+                aria-label="Lihat dari atas"
+                title="Lihat dari atas"
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:h-11 sm:w-11 sm:rounded-xl",
+                  topView
+                    ? "border-brand-600 bg-brand-600 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50"
+                )}
+              >
+                <Eye className="h-5 w-5" />
+              </button>
+            )}
+            <Button
               type="button"
+              size="sm"
+              variant={micro ? "secondary" : "primary"}
               onClick={toggleMicro}
               aria-pressed={micro}
-              className={cn(
-                "absolute bottom-3 right-3 inline-flex h-12 items-center gap-2 rounded-full px-4 text-sm font-black shadow-lg transition-colors",
-                micro ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-brand-600 text-white hover:bg-brand-700"
-              )}
+              className="h-10 shrink-0 px-2 text-xs sm:h-11 sm:px-3 sm:text-sm"
             >
-              <Atom className="h-5 w-5" />
               {micro ? "Kembali" : "Perbesar"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -473,66 +445,69 @@ export default function M3SimStage({
         )}
       </div>
 
-      {/* ---------------- temperature chips ---------------- */}
-      <div className="thin-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
-        {ordered.map((value) => {
-          const run = runs[safeKey(value)];
-          const active = value === param;
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => selectParam(value)}
-              aria-pressed={active}
+      {/* ---------------- simulation information ---------------- */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Suhu pengamatan</p>
+            <p className="mt-0.5 text-sm font-black tabular-nums text-slate-800">
+              {tempLabel(micro ? microTemp : temp)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Waktu reaksi</p>
+            <p className="mt-0.5 text-sm font-black tabular-nums text-brand-700">
+              {fmtSeconds(phase === "idle" && currentRun ? currentRun.timeSec ?? 0 : elapsedUi)} s
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status</p>
+            <p
               className={cn(
-                "flex min-h-12 min-w-[96px] shrink-0 snap-start flex-col items-center justify-center rounded-2xl border px-3 py-1.5 transition-colors",
-                active
-                  ? "border-brand-600 bg-brand-600 text-white shadow-md shadow-brand-200"
-                  : run
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-brand-300"
+                "mt-0.5 text-sm font-black",
+                phase === "ready" || phase === "done" || (phase === "idle" && currentRun)
+                  ? "text-emerald-700"
+                  : phase === "reacting"
+                    ? "text-brand-700"
+                    : phase === "heating" || phase === "pouring"
+                      ? "text-amber-700"
+                      : "text-slate-700"
               )}
             >
-              <span className="text-sm font-black tabular-nums leading-tight">{tempLabel(parseFloat(value))}</span>
-              <span
-                className={cn(
-                  "mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums",
-                  active ? "text-brand-100" : run ? "text-emerald-700" : "text-slate-400"
-                )}
-              >
-                {run ? (
-                  <>
-                    <Check className="h-3 w-3" /> {fmtSeconds(run.timeSec ?? 0)} s
-                  </>
-                ) : (
-                  "—"
-                )}
-              </span>
-            </button>
-          );
-        })}
-        <span className="ml-auto hidden shrink-0 self-center text-[11px] font-bold text-slate-400 sm:block">
-          {completedCount}/{ordered.length}
-        </span>
+              {statusLabel}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              {micro ? "Tumbukan" : "Tampilan"}
+            </p>
+            {micro ? (
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-black tabular-nums">
+                <span className="inline-flex items-center gap-1 text-amber-700" title="Tumbukan efektif">
+                  <Zap className="h-3.5 w-3.5" /> {stats.effective} efektif
+                </span>
+                <span className="inline-flex items-center gap-1 text-slate-500" title="Tumbukan tidak efektif">
+                  <Circle className="h-3.5 w-3.5" /> {stats.ineffective} tidak
+                </span>
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm font-black text-slate-800">Makroskopik</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ---------------- controls ---------------- */}
-      <div className="grid grid-cols-[1fr_auto] gap-2 sm:flex sm:flex-wrap">
+      <div className="flex justify-end">
         <Button
-          disabled={primary.disabled}
-          onClick={primaryAction}
-          className={cn("min-h-12 whitespace-nowrap px-3 sm:min-w-[230px]", primary.cls)}
-        >
-          <PrimaryIcon className={cn("h-4 w-4 shrink-0", phase === "reacting" && "fill-current")} /> {primary.label}
-        </Button>
-        <Button
+          size="sm"
           variant="secondary"
           onClick={() => {
             resetRun();
             setHintState(null);
           }}
           disabled={phase === "idle" && !currentRun}
-          className="min-h-12 whitespace-nowrap px-3"
+          className="min-h-10 whitespace-nowrap px-3 sm:min-h-11"
         >
           <RotateCcw className="h-4 w-4 shrink-0" /> Ulangi
         </Button>

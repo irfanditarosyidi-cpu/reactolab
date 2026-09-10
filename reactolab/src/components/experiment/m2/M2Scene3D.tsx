@@ -1063,11 +1063,6 @@ export default memo(function M2Scene3D({ shared, micro, onStats, className }: Pr
           className="pointer-events-none absolute inset-0 [background:radial-gradient(ellipse_at_center,rgba(255,255,255,0)_58%,rgba(219,234,254,0.85)_100%)]"
         />
       )}
-      {fallback && (
-        <p className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-white/85 px-2.5 py-1 text-[10px] font-bold text-slate-500">
-          Mode 2D (WebGL tidak tersedia)
-        </p>
-      )}
     </div>
   );
 });
