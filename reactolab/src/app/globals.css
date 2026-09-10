@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ReactoLab — clean white + blue theme (PRD §11) */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Slim scrollbars for data tables */
+.thin-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full;
+}
+
+@keyframes floatBubble {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-46px) scale(0.6);
+    opacity: 0;
+  }
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scaleY(1) skewX(-2deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scaleY(1.18) skewX(3deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes rustGrow {
+  from {
+    opacity: 0.15;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+}
+
+.anim-bubble {
+  animation: floatBubble 1.6s ease-in infinite;
+}
+.anim-flame {
+  animation: flicker 0.5s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+.anim-rust {
+  animation: rustGrow 4s ease-out infinite alternate;
+}

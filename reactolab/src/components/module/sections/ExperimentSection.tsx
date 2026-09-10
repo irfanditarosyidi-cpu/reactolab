@@ -1,0 +1,338 @@
+"use client";
+
+// Section 4 — Integrated Experiment Workspace (PRD §16.1, §30).
+// Setup → macroscopic sim (+ inline submicroscopic magnifier) → auto data →
+// graphs → symbolic → 3-level explanation. All in ONE section on ONE page,
+// with strict internal micro-step order.
+
+import { useState } from "react";
+import { Beaker, Check, Lock } from "lucide-react";
+import Button from "@/components/ui/Button";
+import { Help } from "@/components/ui/forms";
+import { cn } from "@/lib/utils";
+import SimStage from "@/components/experiment/SimStage";
+import M1ExperimentSetup from "@/components/experiment/m1/M1ExperimentSetup";
+import M1SimStage from "@/components/experiment/m1/M1SimStage";
+import M2ExperimentSetup from "@/components/experiment/m2/M2ExperimentSetup";
+import M2SimStage from "@/components/experiment/m2/M2SimStage";
+import M3ExperimentSetup from "@/components/experiment/m3/M3ExperimentSetup";
+import M3SimStage from "@/components/experiment/m3/M3SimStage";
+import M4ExperimentSetup from "@/components/experiment/m4/M4ExperimentSetup";
+import M4SimStage from "@/components/experiment/m4/M4SimStage";
+import DataPanel, { orderedRuns } from "@/components/experiment/DataPanel";
+import { EnergyDiagram, MaxwellBoltzmann } from "@/components/experiment/extras";
+import {
+  ExplainPanel,
+  SymbolicPanel,
+  explainComplete,
+} from "@/components/experiment/panels";
+import { useEngine } from "../engine";
+import type { SectionProps } from "./InquirySections";
+import type { ExperimentDraft } from "@/lib/types";
+
+function SubStep({
+  n,
+  title,
+  state,
+  children,
+}: {
+  n: string;
+  title: string;
+  state: "locked" | "open" | "done";
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-3 sm:p-4",
+        state === "open" && "border-brand-200 bg-white",
+        state === "done" && "border-emerald-200 bg-white",
+        state === "locked" && "border-slate-200 bg-slate-50 opacity-70"
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            "h-6 w-6 rounded-lg text-[11px] font-black flex items-center justify-center shrink-0",
+            state === "open" && "bg-brand-600 text-white",
+            state === "done" && "bg-emerald-500 text-white",
+            state === "locked" && "bg-slate-200 text-slate-500"
+          )}
+        >
+          {state === "done" ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : state === "locked" ? (
+            <Lock className="h-3 w-3" />
+          ) : (
+            n
+          )}
+        </span>
+        <h4 className="text-sm font-bold text-slate-800">{title}</h4>
+      </div>
+      {state !== "locked" && children ? <div className="mt-3">{children}</div> : null}
+      {state === "locked" && (
+        <p className="mt-2 text-xs text-slate-400 pl-9">
+          Selesaikan langkah sebelumnya dahulu.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function ExperimentSection({ sec, readOnly }: SectionProps) {
+  const { moduleId, def, drafts, runs, updateDraft, completeSection, recordRun } = useEngine();
+  const cfg = def.experiment!;
+  const d = (drafts[sec.id] ?? {}) as ExperimentDraft;
+  const [busy, setBusy] = useState(false);
+
+  const selected = (d.selected ?? []).filter((value) =>
+    cfg.options.some((option) => option.value === value),
+  );
+  const setupLocked = Boolean(d.setupLocked);
+  const doneRuns = orderedRuns(cfg, runs);
+  const allRunsDone =
+    setupLocked &&
+    selected.length >= cfg.minSelections &&
+    selected.every((v) => Boolean(runs[v.replace(/[.#$/[\]]/g, "_")]));
+  const symbolicOk = Boolean(d.symbolicOk);
+  const explain = d.explain ?? {};
+  const explainOk = explainComplete(explain);
+
+  const toggleOption = (value: string) => {
+    if (readOnly || setupLocked) return;
+    const next = selected.includes(value)
+      ? selected.filter((v) => v !== value)
+      : [...selected, value];
+    updateDraft(sec.id, { selected: next });
+  };
+
+  const stepState = (open: boolean, done: boolean): "locked" | "open" | "done" =>
+    done ? "done" : open ? "open" : "locked";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2.5 rounded-xl border border-brand-100 bg-brand-50 px-3 py-3 sm:px-4">
+        <Beaker className="h-4.5 w-4.5 text-brand-600 shrink-0 mt-0.5" style={{ width: 18, height: 18 }} />
+        <p className="text-sm text-brand-900">
+          <b>{cfg.title}.</b> Kerjakan langkah A–E secara berurutan. Semua analisis
+          (partikel, tabel, grafik, simbolik) ada di halaman ini juga.
+        </p>
+      </div>
+
+      {/* A. Setup */}
+      <SubStep
+        n="A"
+        title={
+          moduleId === 1
+            ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} kondisi`
+            : moduleId === 2
+              ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} bentuk CaCO₃`
+            : moduleId === 3
+              ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} suhu`
+            : `Setup Eksperimen — pilih minimal ${cfg.minSelections} ${cfg.paramName.toLowerCase()}`
+        }
+        state={stepState(true, setupLocked)}
+      >
+        {moduleId === 1 ? (
+          <M1ExperimentSetup
+            options={cfg.options}
+            selected={selected}
+            locked={setupLocked}
+            readOnly={readOnly}
+            onToggle={toggleOption}
+          />
+        ) : moduleId === 2 ? (
+          <M2ExperimentSetup
+            options={cfg.options}
+            selected={selected}
+            locked={setupLocked}
+            readOnly={readOnly}
+            onToggle={toggleOption}
+          />
+        ) : moduleId === 3 ? (
+          <M3ExperimentSetup
+            options={cfg.options}
+            selected={selected}
+            locked={setupLocked}
+            readOnly={readOnly}
+            onToggle={toggleOption}
+          />
+        ) : moduleId === 4 ? (
+          <M4ExperimentSetup options={cfg.options} selected={selected} locked={setupLocked} readOnly={readOnly} onToggle={toggleOption} />
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {cfg.options.map((o) => {
+              const on = selected.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  disabled={readOnly || setupLocked}
+                  onClick={() => toggleOption(o.value)}
+                  className={cn(
+                    "rounded-xl border px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed",
+                    on
+                      ? "border-brand-500 bg-brand-600 text-white"
+                      : "border-slate-300 bg-white text-slate-600 hover:border-brand-400"
+                  )}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!setupLocked && !readOnly && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <Button
+              size="sm"
+              disabled={selected.length < cfg.minSelections}
+              onClick={() => updateDraft(sec.id, { setupLocked: true })}
+              className="min-h-11 w-full sm:w-auto"
+            >
+              Kunci Pilihan &amp; Siapkan Alat
+            </Button>
+            <span className="text-xs text-slate-400">
+              {selected.length}/{cfg.minSelections} minimal dipilih
+            </span>
+          </div>
+        )}
+        {setupLocked && (
+          <p className="text-xs text-emerald-700 font-semibold">
+            ✔ Setup terkunci: {selected.length} kondisi siap diuji.
+          </p>
+        )}
+      </SubStep>
+
+      {/* B. Simulation + magnifier */}
+      <SubStep
+        n="B"
+        title={
+          moduleId === 2
+            ? "Simulasi Pendesakan Air + Zoom Permukaan Submikroskopik"
+            : moduleId === 3
+              ? "Simulasi Tanda X + Zoom Tumbukan Submikroskopik"
+            : moduleId === 4
+              ? "Simulasi Dekomposisi H₂O₂ + Mekanisme Katalis Submikroskopik"
+            : "Simulasi Makroskopik + Kaca Pembesar Submikroskopik"
+        }
+        state={stepState(setupLocked, allRunsDone)}
+      >
+        {moduleId === 1 ? (
+          <M1SimStage
+            cfg={cfg}
+            selected={selected}
+            runs={runs}
+            readOnly={readOnly}
+            onRunDone={(run) => void recordRun(run)}
+          />
+        ) : moduleId === 2 ? (
+          <M2SimStage
+            cfg={cfg}
+            selected={selected}
+            runs={runs}
+            readOnly={readOnly}
+            onRunDone={(run) => void recordRun(run)}
+          />
+        ) : moduleId === 3 ? (
+          <M3SimStage
+            cfg={cfg}
+            selected={selected}
+            runs={runs}
+            readOnly={readOnly}
+            onRunDone={(run) => void recordRun(run)}
+          />
+        ) : moduleId === 4 ? (
+          <M4SimStage cfg={cfg} selected={selected} runs={runs} readOnly={readOnly} onRunDone={(run) => void recordRun(run)} />
+        ) : (
+          <SimStage
+            cfg={cfg}
+            selected={selected}
+            runs={runs}
+            onRunDone={(run) => void recordRun(run)}
+          />
+        )}
+        {!allRunsDone && (
+          <Help>
+            Jalankan simulasi untuk <b>semua</b> kondisi yang kamu pilih. Data akan
+            tercatat otomatis.
+          </Help>
+        )}
+      </SubStep>
+
+      {/* C. Data + graphs (+ module-specific inline visuals) */}
+      <SubStep
+        n="C"
+        title="Data Percobaan & Grafik (otomatis)"
+        state={stepState(doneRuns.length > 0, allRunsDone)}
+      >
+        <DataPanel cfg={cfg} runs={runs} />
+        {cfg.kind === "temperature" && (
+          <div className="mt-4">
+            <MaxwellBoltzmann cfg={cfg} runs={runs} />
+          </div>
+        )}
+        {cfg.kind === "catalyst" && (
+          <div className="mt-4">
+            <EnergyDiagram />
+          </div>
+        )}
+      </SubStep>
+
+      {/* D. Symbolic */}
+      <SubStep
+        n="D"
+        title="Representasi Simbolik — Persamaan Reaksi & Laju"
+        state={stepState(allRunsDone, symbolicOk)}
+      >
+        <SymbolicPanel
+          cfg={cfg}
+          answer={d.symbolicAnswer ?? ""}
+          ok={symbolicOk}
+          readOnly={readOnly}
+          onChange={(v) => updateDraft(sec.id, { symbolicAnswer: v })}
+          onValidated={(ok) => updateDraft(sec.id, { symbolicOk: ok })}
+        />
+      </SubStep>
+
+      {/* E. Explain 3 level */}
+      <SubStep
+        n="E"
+        title="Jelaskan pada 3 Level Representasi"
+        state={stepState(symbolicOk, explainOk)}
+      >
+        <ExplainPanel
+          value={explain}
+          readOnly={readOnly}
+          onChange={(v) => updateDraft(sec.id, { explain: v })}
+        />
+      </SubStep>
+
+      {!readOnly && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+          <Button
+            disabled={!(setupLocked && allRunsDone && symbolicOk && explainOk)}
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await completeSection(sec.id);
+              } catch {
+                // handled by save indicator
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Selesaikan Bagian Eksperimen
+          </Button>
+          {!(setupLocked && allRunsDone && symbolicOk && explainOk) && (
+            <p className="text-xs text-slate-400">
+              Lengkapi langkah A–E untuk menyelesaikan bagian ini.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
