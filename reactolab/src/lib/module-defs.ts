@@ -199,7 +199,7 @@ export const MODULES: ModuleDef[] = [
         { value: "bongkahan", label: "Bongkahan", factor: 1.0 },
         { value: "kepingan", label: "Kepingan", factor: 2.1 },
         { value: "butiran", label: "Butiran", factor: 3.4 },
-        { value: "serbuk", label: "Serbuk", factor: 5.5 },
+        { value: "serbuk", label: "Serbuk halus", factor: 5.5 },
       ],
       reaction: "CaCO₃(s) + 2HCl(aq) → CaCl₂(aq) + H₂O(l) + CO₂(g)",
       reactionLeft: "CaCO₃(s) + 2HCl(aq) →",
@@ -211,11 +211,14 @@ export const MODULES: ModuleDef[] = [
       rateLabel: "v = ΔV/Δt",
       rateUnit: "mL/s",
       timeLabel: "Volume gas CO₂ (mL)",
-      gas: { vmax: 48, sampleEvery: 10, duration: 40 },
+      // sampleEvery = interval pencatatan otomatis (s simulasi); duration = batas
+      // maksimum pengamatan — reaksi dinyatakan selesai lebih awal saat volume
+      // gas berhenti bertambah (berbeda untuk tiap bentuk).
+      gas: { vmax: 48, sampleEvery: 10, duration: 300 },
       chartX: "Bentuk CaCO₃",
       numericParam: false,
       stageNote:
-        "Gunakan massa CaCO₃, volume dan konsentrasi HCl, serta suhu yang sama pada setiap variasi. HCl dibuat berlebih. CO₂ dialirkan melalui selang ke gelas ukur terbalik berisi air; baca batas gas–air setiap 10 detik selama 40 detik. Massa setara menghasilkan jumlah teoritis CO₂ yang sama, sedangkan bentuk padatan memengaruhi cepatnya gas terbentuk.",
+        "Massa CaCO₃, volume dan konsentrasi HCl, serta suhu dibuat sama; hanya bentuk padatan yang diubah. CO₂ dialirkan lewat selang ke gelas ukur terbalik berisi air dan volumenya tercatat otomatis tiap 10 detik sampai reaksi selesai.",
     },
   },
   {
@@ -270,7 +273,9 @@ export const MODULES: ModuleDef[] = [
       chartX: "Suhu (°C)",
       numericParam: true,
       stageNote:
-        "Gunakan volume dan konsentrasi Na₂S₂O₃ serta HCl, ukuran gelas, dan tanda X yang sama pada setiap percobaan. Seimbangkan kedua larutan pada suhu target, campurkan sambil memulai stopwatch, lalu amati dari arah yang sama. Hentikan waktu ketika endapan belerang membuat tanda X tidak lagi terlihat.",
+        "Volume dan konsentrasi Na₂S₂O₃ 0,1 M serta HCl 1 M, gelas, dan tanda X dibuat sama; hanya suhu yang diubah. Kedua larutan disetarakan ke suhu target, dicampurkan (stopwatch berjalan otomatis), lalu tekan Stop saat tanda X tidak terlihat.",
+      // Students choose their own temperatures (revisi simulasi 3D Modul 3).
+      customRange: { min: 10, max: 60, step: 5, maxSelections: 6, minGapWarn: 10 },
     },
   },
   {

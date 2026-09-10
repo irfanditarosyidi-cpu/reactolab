@@ -133,9 +133,9 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           moduleId === 1
             ? `Persiapan — tentukan minimal ${cfg.minSelections} konsentrasi HCl`
             : moduleId === 2
-              ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} bentuk CaCO₃`
+              ? `Persiapan — pilih minimal ${cfg.minSelections} bentuk zat padat`
             : moduleId === 3
-              ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} suhu`
+              ? `Persiapan — tentukan minimal ${cfg.minSelections} suhu`
             : `Setup Eksperimen — pilih minimal ${cfg.minSelections} ${cfg.paramName.toLowerCase()}`
         }
         state={stepState(true, setupLocked)}
@@ -160,13 +160,17 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             readOnly={readOnly}
             onToggle={toggleOption}
           />
-        ) : moduleId === 3 ? (
+        ) : moduleId === 3 && customRange ? (
           <M3ExperimentSetup
-            options={cfg.options}
+            range={customRange}
+            minSelections={cfg.minSelections}
             selected={selected}
             locked={setupLocked}
             readOnly={readOnly}
-            onToggle={toggleOption}
+            onChange={(values) => {
+              if (readOnly || setupLocked) return;
+              updateDraft(sec.id, { selected: values });
+            }}
           />
         ) : moduleId === 4 ? (
           <M4ExperimentSetup options={cfg.options} selected={selected} locked={setupLocked} readOnly={readOnly} onToggle={toggleOption} />
@@ -222,9 +226,9 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           moduleId === 1
             ? "Simulasi 3D + Perbesar Partikel"
             : moduleId === 2
-            ? "Simulasi Pendesakan Air + Zoom Permukaan Submikroskopik"
+            ? "Simulasi 3D Pendesakan Air + Zoom Partikel"
             : moduleId === 3
-              ? "Simulasi Tanda X + Zoom Tumbukan Submikroskopik"
+              ? "Laboratorium 3D Tanda X + Perbesar Partikel"
             : moduleId === 4
               ? "Simulasi Dekomposisi H₂O₂ + Mekanisme Katalis Submikroskopik"
             : "Simulasi Makroskopik + Kaca Pembesar Submikroskopik"
@@ -248,6 +252,8 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             runs={runs}
             readOnly={readOnly}
             onRunDone={(run) => void recordRun(run)}
+            tutorialSeen={Boolean(d.m2TutorialSeen)}
+            onTutorialSeen={() => updateDraft(sec.id, { m2TutorialSeen: true })}
           />
         ) : moduleId === 3 ? (
           <M3SimStage
@@ -256,6 +262,8 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             runs={runs}
             readOnly={readOnly}
             onRunDone={(run) => void recordRun(run)}
+            tutorialSeen={Boolean(d.m3TutorialSeen)}
+            onTutorialSeen={() => updateDraft(sec.id, { m3TutorialSeen: true })}
           />
         ) : moduleId === 4 ? (
           <M4SimStage cfg={cfg} selected={selected} runs={runs} readOnly={readOnly} onRunDone={(run) => void recordRun(run)} />
@@ -271,6 +279,10 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           <Help>
             {moduleId === 1 ? (
               <>Ukur waktu untuk <b>setiap</b> konsentrasi; data tercatat otomatis.</>
+            ) : moduleId === 2 ? (
+              <>Jalankan reaksi untuk <b>setiap</b> bentuk; volume tercatat otomatis tiap 10 s sampai reaksi selesai.</>
+            ) : moduleId === 3 ? (
+              <>Ukur waktu hilangnya tanda X untuk <b>setiap</b> suhu; data tercatat otomatis.</>
             ) : (
               <>
                 Jalankan simulasi untuk <b>semua</b> kondisi yang kamu pilih. Data akan

@@ -110,12 +110,22 @@ export default function DataPanel({
                     </div>
                     <div className="rounded-lg bg-slate-50 px-2.5 py-2">
                       <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                        {cfg.kind === "surface" ? "V pada 40 s" : "V akhir"}
+                        V akhir
                       </dt>
                       <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
                         {vEnd ?? "—"} mL
                       </dd>
                     </div>
+                    {cfg.kind === "surface" && (
+                      <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2">
+                        <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                          Reaksi selesai pada
+                        </dt>
+                        <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
+                          {r.timeSec !== undefined ? `${r.timeSec} s` : "—"}
+                        </dd>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2">
@@ -142,10 +152,9 @@ export default function DataPanel({
               <th className="px-3 py-2 font-bold">
                 {isGas ? "V pada t=10 s (mL)" : cfg.timeLabel}
               </th>
-              {isGas && (
-                <th className="px-3 py-2 font-bold">
-                  {cfg.kind === "surface" ? "V pada t=40 s (mL)" : "V akhir (mL)"}
-                </th>
+              {isGas && <th className="px-3 py-2 font-bold">V akhir (mL)</th>}
+              {cfg.kind === "surface" && (
+                <th className="px-3 py-2 font-bold">Selesai (s)</th>
               )}
               <th className="px-3 py-2 font-bold">
                 Laju {cfg.rateLabel} ({cfg.rateUnit})
@@ -165,6 +174,11 @@ export default function DataPanel({
                   </td>
                   {isGas && (
                     <td className="px-3 py-2 text-slate-600">{vEnd ?? "-"}</td>
+                  )}
+                  {cfg.kind === "surface" && (
+                    <td className="px-3 py-2 text-slate-600">
+                      {r.timeSec !== undefined ? r.timeSec : "-"}
+                    </td>
                   )}
                   <td className="px-3 py-2 font-bold text-brand-700">{r.rateLabel}</td>
                 </tr>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AuthShell from "@/components/layout/AuthShell";
 import Button from "@/components/ui/Button";
-import { FieldError, Input, Label } from "@/components/ui/forms";
+import { FieldError, Input, Label, PasswordInput } from "@/components/ui/forms";
 import { dashboardPathFor, useAuth } from "@/lib/auth-context";
 import { authErrorMessage } from "@/lib/utils";
 
@@ -66,9 +66,8 @@ export default function LoginPage() {
         </div>
         <div>
           <Label htmlFor="password">Password</Label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

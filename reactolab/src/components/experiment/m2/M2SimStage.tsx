@@ -1,31 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+// Module 2 — simulation orchestrator (mobile-first, minimal UI).
+//
+// Per shape: pick chip → "Masukkan CaCO₃" → reaction runs on an accelerated
+// clock (TIME_SCALE sim-seconds per real second) → the CO₂ volume is read from
+// the inverted cylinder and sampled automatically every `sampleEvery` sim
+// seconds → sampling stops when the volume stops increasing → the run (series,
+// completion time, rate) is recorded automatically. "Zoom" swaps the stage to
+// the particle-surface view.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle2,
-  FlaskConical,
-  Gauge,
-  Pause,
-  Play,
+  ArrowDownToLine,
+  Check,
+  CircleHelp,
+  ClipboardList,
   RotateCcw,
-  Timer,
-  X,
+  Zap,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
-import {
-  buildSeries,
-  computeRate,
-  runDuration,
-  volumeAt,
-} from "../sim-models";
-import M2LabApparatus from "./M2LabApparatus";
-import M2ParticleLens from "./M2ParticleLens";
+import { safeKey } from "@/lib/runs";
+import { volumeAt } from "../sim-models";
+import M2Scene3D, { type M2SimShared, type M2Stats } from "./M2Scene3D";
+import M2Tutorial from "./M2Tutorial";
 
-function runKey(value: string) {
-  return value.replace(/[.#$/[\]]/g, "_");
+type Phase = "idle" | "inserting" | "reacting" | "done";
+interface Hint {
+  text: string;
+  tone: "info" | "warn" | "ok";
+}
+interface Sample {
+  t: number;
+  v: number;
+}
+
+const TIME_SCALE = 5; // simulated seconds per real second
+const INSERT_MS = 900;
+const COMPLETE_DELTA_ML = 0.2; // "volume stopped increasing" threshold per interval
+
+function fmtMl(v: number): string {
+  return v.toFixed(1).replace(".", ",");
 }
 
 export default function M2SimStage({
@@ -34,448 +53,391 @@ export default function M2SimStage({
   runs,
   readOnly = false,
   onRunDone,
+  tutorialSeen,
+  onTutorialSeen,
 }: {
   cfg: ExperimentConfig;
   selected: string[];
   runs: Record<string, ExperimentRun>;
   readOnly?: boolean;
   onRunDone: (run: ExperimentRun) => void;
+  tutorialSeen: boolean;
+  onTutorialSeen: () => void;
 }) {
-  const options = cfg.options.filter((option) => selected.includes(option.value));
+  const options = useMemo(
+    () => cfg.options.filter((o) => selected.includes(o.value)),
+    [cfg.options, selected]
+  );
+  const vmax = cfg.gas?.vmax ?? 48;
+  const sampleEvery = cfg.gas?.sampleEvery ?? 10;
+  const maxSimT = cfg.gas?.duration ?? 300;
+
   const [param, setParam] = useState(options[0]?.value ?? "");
-  const [running, setRunning] = useState(false);
-  const [speed, setSpeed] = useState(3);
-  const [simT, setSimT] = useState(0);
-  const [doneFlag, setDoneFlag] = useState(false);
-  const [magnifier, setMagnifier] = useState(false);
-  const [zoomEnabled, setZoomEnabled] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [volumeUi, setVolumeUi] = useState(0);
+  const [simTUi, setSimTUi] = useState(0);
+  const [samples, setSamples] = useState<Sample[]>([]);
+  const [micro, setMicro] = useState(false);
+  const [stats, setStats] = useState<M2Stats>({ collisions: 0 });
+  const [hint, setHintState] = useState<Hint | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(!tutorialSeen && !readOnly);
+  const [tutorialMandatory, setTutorialMandatory] = useState(!tutorialSeen && !readOnly);
 
-  const tRef = useRef(0);
-  const runningRef = useRef(false);
-  const speedRef = useRef(3);
-  const paramRef = useRef(param);
-  const doneRef = useRef(false);
-  runningRef.current = running;
-  speedRef.current = speed;
-  paramRef.current = param;
+  const option = options.find((o) => o.value === param) ?? options[0];
+  const factor = option?.factor ?? 1;
 
-  const opt = options.find((option) => option.value === param) ?? options[0];
-  const maxFactor = Math.max(...cfg.options.map((option) => option.factor));
-  const duration = opt ? runDuration(cfg, opt.factor) : cfg.gas?.duration ?? 40;
-  const vmax = cfg.gas?.vmax ?? 50;
-  const volume = opt ? volumeAt(cfg, opt.factor, simT) : 0;
-  const reactionProgress = Math.min(1, volume / vmax);
-  const observationProgress = Math.min(1, simT / duration);
-  const started = running || simT > 0;
+  const sharedRef = useRef<M2SimShared>({
+    shape: option?.value ?? "bongkahan",
+    factor,
+    volume: 0,
+    vmax,
+    progress: 0,
+    inserted: false,
+    reacting: false,
+    finished: false,
+    micro: false,
+    resetToken: 0,
+  });
+  sharedRef.current.shape = option?.value ?? sharedRef.current.shape;
+  sharedRef.current.factor = factor;
+  sharedRef.current.vmax = vmax;
 
-  const finishRun = useCallback(() => {
-    if (readOnly) return;
-    const option = cfg.options.find((item) => item.value === paramRef.current);
-    if (!option) return;
+  const phaseRef = useRef<Phase>("idle");
+  const insertStartRef = useRef(0);
+  const reactionStartRef = useRef(0);
+  const nextSampleRef = useRef(sampleEvery);
+  const samplesRef = useRef<Sample[]>([]);
+  const factorRef = useRef(factor);
+  const optionRef = useRef(option);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  factorRef.current = factor;
+  optionRef.current = option;
 
-    const runTime = runDuration(cfg, option.factor);
-    const { rate, rateLabel } = computeRate(cfg, option.factor, runTime);
-    onRunDone({
-      id: `${option.value}-${Date.now()}`,
-      paramValue: option.value,
-      label: option.label,
-      timeSec: runTime,
-      series: buildSeries(cfg, option.factor),
-      rate,
-      rateLabel,
-      at: Date.now(),
-    });
-  }, [cfg, onRunDone, readOnly]);
+  const setHint = useCallback((text: string, tone: Hint["tone"] = "info") => {
+    setHintState({ text, tone });
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHintState(null), tone === "ok" ? 4500 : 3200);
+  }, []);
 
   useEffect(() => {
-    let frame = 0;
-    let last = performance.now();
+    if (!options.some((o) => o.value === param)) setParam(options[0]?.value ?? "");
+  }, [options, param]);
 
-    const tick = (now: number) => {
-      const delta = Math.min(0.06, (now - last) / 1000);
-      last = now;
+  const resetRun = useCallback(() => {
+    phaseRef.current = "idle";
+    samplesRef.current = [];
+    nextSampleRef.current = sampleEvery;
+    const s = sharedRef.current;
+    s.volume = 0;
+    s.progress = 0;
+    s.inserted = false;
+    s.reacting = false;
+    s.finished = false;
+    s.resetToken += 1;
+    setPhase("idle");
+    setVolumeUi(0);
+    setSimTUi(0);
+    setSamples([]);
+    setStats({ collisions: 0 });
+  }, [sampleEvery]);
 
-      if (runningRef.current && !doneRef.current) {
-        tRef.current += delta * speedRef.current;
-        const option = cfg.options.find(
-          (item) => item.value === paramRef.current,
-        );
+  const finishRun = useCallback(
+    (tDone: number) => {
+      const opt = optionRef.current;
+      if (!opt) return;
+      const series = samplesRef.current;
+      const v10 = series.find((p) => p.t === 10)?.v ?? Math.round(volumeAt(cfg, opt.factor, 10) * 10) / 10;
+      const rate = v10 / 10;
+      const run: ExperimentRun = {
+        id: `${opt.value}-${Date.now()}`,
+        paramValue: opt.value,
+        label: opt.label,
+        timeSec: tDone,
+        series,
+        rate,
+        rateLabel: `${rate.toFixed(2)} ${cfg.rateUnit}`,
+        at: Date.now(),
+      };
+      if (readOnly) setHint("Pemutaran ulang — data tersimpan tidak diubah.");
+      else {
+        onRunDone(run);
+        setHint(`Reaksi selesai pada ${tDone} s — data tercatat.`, "ok");
+      }
+    },
+    [cfg, onRunDone, readOnly, setHint]
+  );
 
-        if (option) {
-          const runTime = runDuration(cfg, option.factor);
-          if (tRef.current >= runTime) {
-            tRef.current = runTime;
-            doneRef.current = true;
-            runningRef.current = false;
-            setDoneFlag(true);
-            setRunning(false);
-            finishRun();
+  // ---- simulation clock (accelerated) ----
+  useEffect(() => {
+    let raf = 0;
+    let lastUi = 0;
+    const loop = (now: number) => {
+      const s = sharedRef.current;
+      if (phaseRef.current === "inserting" && now - insertStartRef.current >= INSERT_MS) {
+        phaseRef.current = "reacting";
+        reactionStartRef.current = now;
+        samplesRef.current = [{ t: 0, v: 0 }];
+        nextSampleRef.current = sampleEvery;
+        setSamples([{ t: 0, v: 0 }]);
+        setPhase("reacting");
+      }
+      let simT = 0;
+      if (phaseRef.current === "reacting") {
+        simT = ((now - reactionStartRef.current) / 1000) * TIME_SCALE;
+        let v = volumeAt(cfg, factorRef.current, simT);
+        // automatic sampling every `sampleEvery` s until the volume stops rising
+        while (phaseRef.current === "reacting" && simT >= nextSampleRef.current) {
+          const t = nextSampleRef.current;
+          const sv = Math.round(volumeAt(cfg, factorRef.current, t) * 10) / 10;
+          const prev = samplesRef.current[samplesRef.current.length - 1];
+          samplesRef.current = [...samplesRef.current, { t, v: sv }];
+          setSamples(samplesRef.current);
+          if ((prev && sv - prev.v < COMPLETE_DELTA_ML) || t >= maxSimT) {
+            phaseRef.current = "done";
+            v = sv;
+            simT = t;
+            setPhase("done");
+            finishRun(t);
+          } else {
+            nextSampleRef.current = t + sampleEvery;
           }
         }
-
-        setSimT(tRef.current);
+        s.volume = v;
+        s.progress = Math.min(1, v / s.vmax);
+      } else if (phaseRef.current === "done") {
+        simT = samplesRef.current[samplesRef.current.length - 1]?.t ?? 0;
       }
-
-      frame = requestAnimationFrame(tick);
+      s.inserted = phaseRef.current !== "idle";
+      s.reacting = phaseRef.current === "reacting";
+      s.finished = phaseRef.current === "done";
+      if (now - lastUi >= 100) {
+        lastUi = now;
+        setVolumeUi(s.volume);
+        setSimTUi(simT);
+      }
+      raf = requestAnimationFrame(loop);
     };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    };
+  }, [cfg, finishRun, maxSimT, sampleEvery]);
 
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [cfg, finishRun]);
+  // ---- actions ----
+  const selectParam = (value: string) => {
+    if (value === param) return;
+    if (phaseRef.current === "reacting") {
+      setHint("Reaksi masih berjalan — tekan Ulangi dulu.", "warn");
+      return;
+    }
+    resetRun();
+    setParam(value);
+  };
 
-  const resetRun = (nextParam?: string) => {
-    tRef.current = 0;
-    runningRef.current = false;
-    doneRef.current = false;
-    setSimT(0);
-    setDoneFlag(false);
-    setRunning(false);
-    setMagnifier(false);
-    if (nextParam) {
-      paramRef.current = nextParam;
-      setParam(nextParam);
+  const insertSolid = () => {
+    if (phaseRef.current !== "idle" || !option) return;
+    phaseRef.current = "inserting";
+    insertStartRef.current = performance.now();
+    setPhase("inserting");
+    setHint(`Volume tercatat otomatis tiap ${sampleEvery} s.`);
+  };
+
+  const toggleMicro = () => {
+    const next = !micro;
+    sharedRef.current.micro = next;
+    setMicro(next);
+  };
+
+  const closeTutorial = (completed: boolean) => {
+    setTutorialOpen(false);
+    if (completed) {
+      setTutorialMandatory(false);
+      if (!tutorialSeen) onTutorialSeen();
     }
   };
 
-  const completedCount = options.filter((option) =>
-    Boolean(runs[runKey(option.value)]),
-  ).length;
-  const sampleEvery = cfg.gas?.sampleEvery ?? 10;
-  const sampleTimes = Array.from(
-    { length: Math.floor(duration / sampleEvery) + 1 },
-    (_, index) => index * sampleEvery,
-  );
-  const stateLabel = doneFlag
-    ? `Pengamatan ${duration} s selesai`
-    : running
-      ? "Pengamatan berlangsung"
-      : simT > 0
-        ? "Pengamatan dijeda"
-        : "Siap dimulai";
+  const completedCount = options.filter((o) => Boolean(runs[safeKey(o.value)])).length;
+  const currentRun = option ? runs[safeKey(option.value)] : undefined;
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-teal-600 shadow-sm ring-1 ring-slate-200">
-              <FlaskConical className="h-4 w-4" />
+    <div className="space-y-3">
+      {/* ---------------- 3D stage ---------------- */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative h-[88vw] max-h-[460px] min-h-[320px] sm:h-[380px] lg:h-[440px]">
+          <M2Scene3D shared={sharedRef} micro={micro} onStats={setStats} className="absolute inset-0" />
+
+          {/* shape (top-left) */}
+          <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+            <span className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-sm font-black text-slate-900 shadow-sm backdrop-blur">
+              {option?.label ?? "—"}
             </span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Rak bentuk CaCO₃ terpilih
-              </p>
-              <p className="text-xs font-semibold text-slate-600">
-                Massa CaCO₃, volume dan konsentrasi HCl, serta suhu dibuat sama
-              </p>
-            </div>
           </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
-            {completedCount}/{options.length} selesai
-          </span>
-        </div>
 
-        <div className="thin-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0">
-          {options.map((option) => {
-            const done = Boolean(runs[runKey(option.value)]);
-            const active = option.value === param;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => resetRun(option.value)}
-                disabled={running}
-                aria-pressed={active}
-                className={cn(
-                  "group relative min-h-14 min-w-[132px] snap-start overflow-hidden rounded-xl border px-3 py-2 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-0",
-                  active
-                    ? "border-teal-500 bg-teal-600 text-white shadow-md shadow-teal-200/70"
-                    : done
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300"
-                      : "border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-sm",
-                )}
-              >
-                <span
-                  className={cn(
-                    "block text-[9px] font-black uppercase tracking-wider",
-                    active ? "text-teal-100" : "text-slate-400",
-                  )}
-                >
-                  {done ? "Data tersimpan" : active ? "Aktif" : "Belum diuji"}
-                </span>
-                <span className="mt-0.5 block text-sm font-black">{option.label}</span>
-                {done && (
-                  <CheckCircle2
-                    className={cn(
-                      "absolute right-2 top-2 h-4 w-4",
-                      active ? "text-white" : "text-emerald-500",
-                    )}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_55px_-34px_rgba(15,23,42,0.55)]">
-        <div className="min-w-0 bg-slate-950">
-          <M2LabApparatus
-            value={opt?.value ?? "bongkahan"}
-            label={opt?.label ?? ""}
-            factor={opt?.factor ?? 1}
-            simTime={simT}
-            duration={duration}
-            volume={volume}
-            vmax={vmax}
-            running={running}
-            started={started}
-            magnifierOpen={magnifier}
-            zoomEnabled={zoomEnabled}
-            onZoomModeToggle={() => {
-              if (zoomEnabled) setMagnifier(false);
-              setZoomEnabled(!zoomEnabled);
+          {/* tutorial replay (top-right) */}
+          <button
+            type="button"
+            onClick={() => {
+              setTutorialMandatory(false);
+              setTutorialOpen(true);
             }}
-            onMagnifierClick={() => setMagnifier((value) => !value)}
-            lensOverlay={
-              magnifier && opt ? (
-                <div className="absolute inset-0 z-30 flex items-start justify-center px-2 pt-3 sm:px-4 sm:pt-5">
-                  <button
-                    type="button"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    onClick={() => setMagnifier(false)}
-                    className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
-                  />
-                  <div
-                    id="m2-particle-panel"
-                    role="dialog"
-                    aria-label={`Lensa submikroskopik permukaan CaCO3 bentuk ${opt.label}`}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") setMagnifier(false);
-                    }}
-                    className="relative z-10 aspect-square h-[72%] max-h-[340px] max-w-[86%] rounded-full border-[5px] border-white bg-sky-50 shadow-[0_22px_60px_rgba(0,0,0,0.48)] ring-2 ring-slate-900/70 sm:h-[78%]"
-                  >
-                    <M2ParticleLens
-                      value={opt.value}
-                      label={opt.label}
-                      factor={opt.factor}
-                      maxFactor={maxFactor}
-                      simTime={simT}
-                      progress={reactionProgress}
-                      running={running}
-                      compact
-                    />
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute bottom-[5%] left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/80 bg-white/90 px-2 py-1.5 text-[7px] font-black text-slate-700 shadow-lg backdrop-blur-sm sm:gap-2.5 sm:px-2.5 sm:text-[9px]"
-                    >
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-500" />H⁺</span>
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-cyan-400" />Cl⁻</span>
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-stone-400" />CaCO₃</span>
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" />tumbukan</span>
-                    </div>
-                    <button
-                      type="button"
-                      autoFocus
-                      onClick={() => setMagnifier(false)}
-                      aria-label="Tutup lensa submikroskopik"
-                      className="absolute right-[2%] top-[2%] z-20 flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-slate-950/85 text-white shadow-lg transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              ) : null
-            }
-          />
-        </div>
-      </div>
+            aria-label="Lihat tutorial"
+            className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-brand-700 shadow-sm backdrop-blur hover:bg-white"
+          >
+            <CircleHelp className="h-5 w-5" />
+          </button>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            {!running ? (
-              <Button
-                size="sm"
-                onClick={() => setRunning(true)}
-                disabled={doneFlag || !opt}
-                className="min-h-11 w-full sm:min-w-28"
-              >
-                <Play className="h-4 w-4" />
-                {simT > 0 ? "Lanjutkan" : "Mulai"}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setRunning(false)}
-                className="min-h-11 w-full sm:min-w-28"
-              >
-                <Pause className="h-4 w-4" /> Jeda
-              </Button>
+          {/* readouts (bottom-left) */}
+          <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col items-start gap-1.5">
+            {phase === "done" && !micro && (
+              <span className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white shadow">
+                Reaksi selesai
+              </span>
             )}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => resetRun()}
-              className="min-h-11 w-full sm:w-auto"
-            >
-              <RotateCcw className="h-4 w-4" /> Ulangi
-            </Button>
-          </div>
-
-          <div className="hidden h-8 w-px bg-slate-200 lg:block" />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              <Gauge className="h-3.5 w-3.5" /> Kecepatan pemutaran
-            </span>
-            <div
-              className="inline-flex rounded-xl bg-slate-100 p-1"
-              role="group"
-              aria-label="Kecepatan pemutaran simulasi"
-            >
-              {[1, 3, 6].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSpeed(value)}
-                  aria-pressed={speed === value}
-                  className={cn(
-                    "min-h-11 min-w-11 rounded-lg px-2.5 py-1 text-xs font-black transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-50",
-                    speed === value
-                      ? "bg-white text-teal-700 shadow-sm ring-1 ring-slate-200"
-                      : "text-slate-400 hover:text-slate-700",
-                  )}
-                >
-                  {value}×
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1 lg:px-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-bold">
+            {micro ? (
               <span
-                role="status"
-                aria-live="polite"
-                className={cn(
-                  "inline-flex items-center gap-1.5",
-                  doneFlag
-                    ? "text-emerald-600"
-                    : running
-                      ? "text-teal-600"
-                      : "text-slate-500",
-                )}
+                title="Tumbukan pada permukaan partikel"
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-black tabular-nums text-amber-950 shadow"
               >
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    doneFlag
-                      ? "bg-emerald-500"
-                      : running
-                        ? "animate-pulse bg-teal-500"
-                        : "bg-slate-300",
-                  )}
-                />
-                {stateLabel}
+                <Zap className="h-3.5 w-3.5" /> {stats.collisions}
+                <span className="font-semibold opacity-80">tumbukan</span>
               </span>
-              <span className="tabular-nums text-slate-400">
-                {Math.round(observationProgress * 100)}%
+            ) : (
+              <span className="inline-flex items-baseline gap-1 rounded-2xl bg-slate-950 px-3.5 py-2 text-white shadow">
+                <span className="font-mono text-2xl font-black tabular-nums leading-none">{fmtMl(volumeUi)}</span>
+                <span className="text-xs font-bold text-slate-300">mL</span>
               </span>
-            </div>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-700 shadow backdrop-blur">
+              t {Math.floor(simTUi)} s
+              <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-black text-slate-600">
+                {TIME_SCALE}×
+              </span>
+            </span>
+          </div>
+
+          {/* Zoom toggle (bottom-right) */}
+          <button
+            type="button"
+            onClick={toggleMicro}
+            aria-pressed={micro}
+            className={cn(
+              "absolute bottom-3 right-3 inline-flex h-12 items-center gap-2 rounded-full px-4 text-sm font-black shadow-lg transition-colors",
+              micro ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-brand-600 text-white hover:bg-brand-700"
+            )}
+          >
+            {micro ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+            {micro ? "Kembali" : "Zoom"}
+          </button>
+
+          {/* gas volume progress (thin bar, no text) */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-slate-200/70">
             <div
-              className="h-2 overflow-hidden rounded-full bg-slate-100"
-              role="progressbar"
-              aria-label="Kemajuan waktu pengamatan"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(observationProgress * 100)}
-            >
-              <div
-                className={cn(
-                  "h-full rounded-full transition-[width] duration-150",
-                  doneFlag
-                    ? "bg-emerald-500"
-                    : "bg-gradient-to-r from-teal-500 to-cyan-500",
-                )}
-                style={{ width: `${observationProgress * 100}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-white shadow-inner sm:w-auto">
-            <Timer className="h-4 w-4 text-cyan-300" />
-            <span className="font-mono text-base font-black tabular-nums">
-              {simT.toFixed(1)}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              detik
-            </span>
+              className={cn("h-full transition-[width]", phase === "done" ? "bg-emerald-500" : "bg-brand-500")}
+              style={{ width: `${Math.round(Math.min(1, volumeUi / vmax) * 100)}%` }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 p-3">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-700">
-              Pencatat volume otomatis
-            </p>
-            <p className="text-xs text-slate-600">
-              Batas gas–air dibaca setiap {sampleEvery} detik
-            </p>
-          </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-cyan-700 ring-1 ring-cyan-100">
-            V CO₂ saat ini: {volume.toFixed(1)} mL
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-          {sampleTimes.map((time) => {
-            const measured = simT + 0.001 >= time;
-            const value = opt ? volumeAt(cfg, opt.factor, time) : 0;
-            return (
-              <div
-                key={time}
+      {/* ---------------- shape chips ---------------- */}
+      <div className="thin-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {options.map((o) => {
+          const run = runs[safeKey(o.value)];
+          const active = o.value === param;
+          const vEnd = run?.series?.[run.series.length - 1]?.v;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => selectParam(o.value)}
+              aria-pressed={active}
+              className={cn(
+                "flex min-h-12 min-w-[110px] shrink-0 snap-start flex-col items-center justify-center rounded-2xl border px-3 py-1.5 transition-colors",
+                active
+                  ? "border-brand-600 bg-brand-600 text-white shadow-md shadow-brand-200"
+                  : run
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-brand-300"
+              )}
+            >
+              <span className="text-sm font-black leading-tight">{o.label}</span>
+              <span
                 className={cn(
-                  "rounded-xl border px-1.5 py-2 text-center transition-colors",
-                  measured
-                    ? "border-cyan-200 bg-white"
-                    : "border-slate-200 bg-slate-100/70 text-slate-400",
+                  "mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums",
+                  active ? "text-brand-100" : run ? "text-emerald-700" : "text-slate-400"
                 )}
               >
-                <p className="text-[9px] font-black uppercase tracking-wide">
-                  {time} s
-                </p>
-                <p className="mt-0.5 font-mono text-xs font-black tabular-nums">
-                  {measured ? `${value.toFixed(1)} mL` : "—"}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+                {run ? (
+                  <>
+                    <Check className="h-3 w-3" /> {vEnd !== undefined ? `${fmtMl(vEnd)} mL` : ""} · {run.timeSec ?? "—"} s
+                  </>
+                ) : (
+                  "—"
+                )}
+              </span>
+            </button>
+          );
+        })}
+        <span className="ml-auto hidden shrink-0 self-center text-[11px] font-bold text-slate-400 sm:block">
+          {completedCount}/{options.length}
+        </span>
       </div>
 
-      <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3.5 py-2.5 text-xs leading-relaxed text-sky-900">
-        <b>Prosedur terkendali:</b> {cfg.stageNote}
-      </div>
-
-      {doneFlag && (
-        <div
-          className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
-          role="status"
-          aria-live="polite"
+      {/* ---------------- controls ---------------- */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <Button
+          variant={phase === "idle" ? "primary" : "secondary"}
+          disabled={phase !== "idle" || !option}
+          onClick={insertSolid}
+          className="min-h-12 whitespace-nowrap px-3 sm:min-w-[190px]"
         >
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-          <p>
-            <b>{readOnly ? "Pemutaran ulang" : "Pengamatan"} {opt?.label} selesai.</b>{" "}
-            {readOnly
-              ? "Data volume yang sudah tersimpan tidak diubah. Tekan Ulangi atau pilih bentuk lain untuk terus mengeksplorasi."
-              : "Lima pembacaan volume CO₂ sudah otomatis dikirim ke tabel dan grafik. Pilih bentuk lain untuk melanjutkan."}
-          </p>
+          <ArrowDownToLine className="h-4 w-4 shrink-0" /> Masukkan CaCO₃
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            resetRun();
+            setHintState(null);
+          }}
+          disabled={phase === "idle" && !currentRun}
+          className="min-h-12 whitespace-nowrap px-3"
+        >
+          <RotateCcw className="h-4 w-4 shrink-0" /> Ulangi
+        </Button>
+      </div>
+
+      {/* ---------------- auto-recorded samples ---------------- */}
+      {samples.length > 0 && (
+        <div className="thin-scroll -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1" aria-label="Data tercatat otomatis">
+          <ClipboardList className="h-4 w-4 shrink-0 text-brand-600" />
+          {samples.map((p) => (
+            <span
+              key={p.t}
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold tabular-nums text-slate-700"
+            >
+              {p.t} s · {fmtMl(p.v)} mL
+            </span>
+          ))}
         </div>
       )}
+
+      {/* ---------------- one-line hint ---------------- */}
+      <p
+        role="status"
+        aria-live="polite"
+        className={cn(
+          "min-h-5 text-center text-xs font-semibold transition-opacity",
+          !hint && "opacity-0",
+          hint?.tone === "warn" && "text-amber-700",
+          hint?.tone === "ok" && "text-emerald-700",
+          hint?.tone === "info" && "text-slate-500"
+        )}
+      >
+        {hint?.text ?? " "}
+      </p>
+
+      <M2Tutorial open={tutorialOpen} mandatory={tutorialMandatory} onClose={closeTutorial} />
     </div>
   );
 }

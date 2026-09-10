@@ -164,6 +164,10 @@ export interface ExperimentDraft {
   explain?: { makro?: string; submikro?: string; simbolik?: string };
   /** Module 1: the step-by-step simulation tutorial has been completed once. */
   m1TutorialSeen?: boolean;
+  /** Module 2: the step-by-step simulation tutorial has been completed once. */
+  m2TutorialSeen?: boolean;
+  /** Module 3: the step-by-step simulation tutorial has been completed once. */
+  m3TutorialSeen?: boolean;
 }
 export interface HypoTestDraft {
   verdict?: "terbukti" | "tidak_terbukti";

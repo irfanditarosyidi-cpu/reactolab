@@ -18,6 +18,7 @@ import {
 import { CHART_COLORS } from "./DataPanel";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
+import { runNumericValue, sortRuns } from "@/lib/runs";
 
 export function MaxwellBoltzmann({
   cfg,
@@ -26,9 +27,12 @@ export function MaxwellBoltzmann({
   cfg: ExperimentConfig;
   runs: Record<string, ExperimentRun>;
 }) {
-  const temps = cfg.options.filter((o) =>
-    Boolean(runs[o.value.replace(/[.#$/[\]]/g, "_")])
-  );
+  // Generic: works for student-defined temperatures as well as legacy presets.
+  const temps = sortRuns(cfg, runs).map((r) => ({
+    value: r.paramValue,
+    label: r.label,
+    factor: runNumericValue(cfg, r),
+  }));
   if (temps.length === 0) return null;
 
   const EA = 46;

@@ -1,6 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 import type {
   InputHTMLAttributes,
   ReactNode,
@@ -37,6 +39,42 @@ export function Input({
   ...rest
 }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(baseField, className)} {...rest} />;
+}
+
+export function PasswordInput({
+  className,
+  disabled,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  const toggleLabel = visible ? "Sembunyikan password" : "Tampilkan password";
+
+  return (
+    <div className="relative">
+      <input
+        {...rest}
+        type={visible ? "text" : "password"}
+        disabled={disabled}
+        className={cn(baseField, "pr-11", className)}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((current) => !current)}
+        disabled={disabled}
+        aria-label={toggleLabel}
+        aria-pressed={visible}
+        aria-controls={rest.id}
+        title={toggleLabel}
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {visible ? (
+          <EyeOff className="h-5 w-5" aria-hidden="true" />
+        ) : (
+          <Eye className="h-5 w-5" aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
 }
 
 export function Textarea({

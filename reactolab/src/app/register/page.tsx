@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AuthShell from "@/components/layout/AuthShell";
 import Button from "@/components/ui/Button";
-import { FieldError, Help, Input, Label } from "@/components/ui/forms";
+import { FieldError, Help, Input, Label, PasswordInput } from "@/components/ui/forms";
 import { useAuth } from "@/lib/auth-context";
 import { authErrorMessage } from "@/lib/utils";
 
@@ -82,9 +82,8 @@ export default function RegisterPage() {
         </div>
         <div>
           <Label htmlFor="password">Password</Label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
@@ -94,9 +93,8 @@ export default function RegisterPage() {
         </div>
         <div>
           <Label htmlFor="confirm">Konfirmasi Password</Label>
-          <Input
+          <PasswordInput
             id="confirm"
-            type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             autoComplete="new-password"
