@@ -7,6 +7,7 @@ import { CheckCircle2, FlaskConical, Lightbulb } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Help, Input, Label, Select, Textarea } from "@/components/ui/forms";
 import { useEngine } from "../engine";
+import { sortRuns } from "@/lib/runs";
 import type { ModuleDef, SectionDef } from "@/lib/module-defs";
 import type {
   ConclusionDraft,
@@ -239,9 +240,8 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
   const cfg = def.experiment!;
   const valid = Boolean(d.verdict && (d.explanation ?? "").trim().length >= 10);
 
-  const orderedRuns: ExperimentRun[] = cfg.options
-    .map((o) => runs[o.value.replace(/[.#$/[\]]/g, "_")])
-    .filter(Boolean) as ExperimentRun[];
+  // Generic ordering so Module 1's student-defined concentrations appear too.
+  const orderedRuns: ExperimentRun[] = sortRuns(cfg, runs);
 
   return (
     <div className="space-y-4">

@@ -54,6 +54,18 @@ export interface ExperimentConfig {
   chartX: string;
   numericParam: boolean;
   stageNote: string; // note under the macroscopic stage
+  /**
+   * When present, students define their own parameter values inside this
+   * range (Module 1: free HCl concentrations) instead of picking presets.
+   * `minGapWarn` triggers a short warning when two values are closer than this.
+   */
+  customRange?: {
+    min: number;
+    max: number;
+    step: number;
+    maxSelections: number;
+    minGapWarn: number;
+  };
 }
 
 export interface ModuleDef {
@@ -148,7 +160,9 @@ export const MODULES: ModuleDef[] = [
       chartX: "Konsentrasi (M)",
       numericParam: true,
       stageNote:
-        "Gunakan 20 mL HCl, suhu, serta pita Mg 0,10 g dengan dimensi awal yang sama pada setiap kondisi. HCl tetap berlebih, termasuk pada 0,5 M. Masukkan Mg ke labu Erlenmeyer terbuka, amati gelembung H₂, lalu catat waktu hingga Mg habis bereaksi. Durasi merupakan model ideal-deterministik; 1/t dipakai sebagai indikator laju relatif untuk jumlah Mg yang tetap.",
+        "Volume HCl 20 mL, suhu, dan pita Mg dibuat sama pada setiap percobaan; hanya konsentrasi HCl yang diubah. Masukkan pita Mg ke tabung reaksi, jalankan stopwatch saat gelembung H₂ mulai muncul, dan hentikan saat pita Mg habis.",
+      // Students choose their own concentrations (PRD revisi simulasi 3D §1–2).
+      customRange: { min: 0.5, max: 3.0, step: 0.05, maxSelections: 6, minGapWarn: 0.3 },
     },
   },
   {

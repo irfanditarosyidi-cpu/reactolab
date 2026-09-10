@@ -1,31 +1,46 @@
 "use client";
 
-// Module 1 simulation orchestrator. The deterministic timing/data model is kept
-// in the parent so the macroscopic and submicroscopic views share one clock.
+// Module 1 — simulation orchestrator (mobile-first, minimal UI).
+//
+// Flow per concentration: pick chip → "Masukkan Mg" → reaction runs in real
+// time (T = 18 / C seconds) → student presses ▶ when bubbles appear → presses ■
+// when the ribbon is gone → measured time is recorded automatically as a run.
+// "Perbesar" swaps the same stage to the submicroscopic particle view.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle2,
-  FlaskConical,
-  Gauge,
-  GitCompareArrows,
-  Pause,
+  Check,
+  Circle,
+  CircleHelp,
+  Pipette,
   Play,
   RotateCcw,
-  Timer,
-  X,
+  Square,
+  Zap,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
-import { buildSeries, computeRate, runDuration } from "../sim-models";
-import M1CompareView from "./M1CompareView";
-import M1LabApparatus from "./M1LabApparatus";
-import M1ParticleLens from "./M1ParticleLens";
+import { concentrationLabel, safeKey } from "@/lib/runs";
+import { runDuration } from "../sim-models";
+import M1Scene3D, { type CollisionStats, type M1SimShared } from "./M1Scene3D";
+import M1Tutorial from "./M1Tutorial";
 
-function runKey(value: string) {
-  return value.replace(/[.#$/[\]]/g, "_");
+type Phase = "idle" | "inserting" | "reacting" | "done";
+type SwState = "off" | "running" | "stopped";
+interface Hint {
+  text: string;
+  tone: "info" | "warn" | "ok";
+}
+
+const INSERT_MS = 700;
+const LATE_FRACTION = 0.25;
+
+function fmtSeconds(sec: number): string {
+  return sec.toFixed(1).replace(".", ",");
 }
 
 export default function M1SimStage({
@@ -34,453 +49,432 @@ export default function M1SimStage({
   runs,
   readOnly = false,
   onRunDone,
+  tutorialSeen,
+  onTutorialSeen,
 }: {
   cfg: ExperimentConfig;
   selected: string[];
   runs: Record<string, ExperimentRun>;
   readOnly?: boolean;
   onRunDone: (run: ExperimentRun) => void;
+  tutorialSeen: boolean;
+  onTutorialSeen: () => void;
 }) {
-  const options = cfg.options.filter((option) => selected.includes(option.value));
-  const [param, setParam] = useState(options[0]?.value ?? "");
-  const [running, setRunning] = useState(false);
-  const [speed, setSpeed] = useState(3);
-  const [simT, setSimT] = useState(0);
-  const [doneFlag, setDoneFlag] = useState(false);
-  const [magnifier, setMagnifier] = useState(false);
-  const [zoomEnabled, setZoomEnabled] = useState(false);
-  const [comparing, setComparing] = useState(false);
+  const ordered = useMemo(
+    () => [...selected].sort((a, b) => parseFloat(a) - parseFloat(b)),
+    [selected]
+  );
+  const maxConc = cfg.customRange?.max ?? 3;
 
-  const tRef = useRef(0);
-  const runningRef = useRef(false);
-  const speedRef = useRef(3);
-  const paramRef = useRef(param);
-  const doneRef = useRef(false);
-  runningRef.current = running;
-  speedRef.current = speed;
-  paramRef.current = param;
+  const [param, setParam] = useState(ordered[0] ?? "");
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [sw, setSw] = useState<SwState>("off");
+  const [elapsedUi, setElapsedUi] = useState(0);
+  const [progressUi, setProgressUi] = useState(0);
+  const [micro, setMicro] = useState(false);
+  const [stats, setStats] = useState<CollisionStats>({ effective: 0, ineffective: 0 });
+  const [hint, setHintState] = useState<Hint | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(!tutorialSeen && !readOnly);
+  const [tutorialMandatory, setTutorialMandatory] = useState(!tutorialSeen && !readOnly);
 
-  const opt = options.find((option) => option.value === param) ?? options[0];
-  const maxFactor = Math.max(...cfg.options.map((option) => option.factor));
-  const duration = opt ? runDuration(cfg, opt.factor) : 10;
-  const progress = Math.min(1, simT / duration);
-  const started = running || simT > 0;
+  const conc = parseFloat(param) || 1;
+  const duration = runDuration(cfg, conc);
 
-  const finishRun = useCallback(() => {
-    if (readOnly) return;
-    const option = cfg.options.find((item) => item.value === paramRef.current);
-    if (!option) return;
+  const sharedRef = useRef<M1SimShared>({
+    concentration: conc,
+    maxConcentration: maxConc,
+    progress: 0,
+    inserted: false,
+    reacting: false,
+    finished: false,
+    micro: false,
+    resetToken: 0,
+  });
+  const phaseRef = useRef<Phase>("idle");
+  const swRef = useRef<SwState>("off");
+  const durationRef = useRef(duration);
+  const insertStartRef = useRef(0);
+  const reactionStartRef = useRef(0);
+  const swStartRef = useRef(0);
+  const swElapsedRef = useRef(0);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  durationRef.current = duration;
+  sharedRef.current.concentration = conc;
 
-    const runTime = runDuration(cfg, option.factor);
-    const { rate, rateLabel } = computeRate(cfg, option.factor, runTime);
-    const run: ExperimentRun = {
-      id: `${option.value}-${Date.now()}`,
-      paramValue: option.value,
-      label: option.label,
-      timeSec: runTime,
-      rate,
-      rateLabel,
-      at: Date.now(),
-      ...(cfg.rateKind === "gasRate"
-        ? { series: buildSeries(cfg, option.factor) }
-        : {}),
-    };
+  const setHint = useCallback((text: string, tone: Hint["tone"] = "info") => {
+    setHintState({ text, tone });
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHintState(null), tone === "ok" ? 4500 : 3200);
+  }, []);
 
-    onRunDone(run);
-  }, [cfg, onRunDone, readOnly]);
-
+  // keep the active chip valid when the setup list changes
   useEffect(() => {
-    let frame = 0;
-    let last = performance.now();
+    if (!ordered.includes(param)) setParam(ordered[0] ?? "");
+  }, [ordered, param]);
 
-    const tick = (now: number) => {
-      const delta = Math.min(0.06, (now - last) / 1000);
-      last = now;
+  const resetRun = useCallback(() => {
+    phaseRef.current = "idle";
+    swRef.current = "off";
+    swElapsedRef.current = 0;
+    const s = sharedRef.current;
+    s.progress = 0;
+    s.inserted = false;
+    s.reacting = false;
+    s.finished = false;
+    s.resetToken += 1;
+    setPhase("idle");
+    setSw("off");
+    setElapsedUi(0);
+    setProgressUi(0);
+    setStats({ effective: 0, ineffective: 0 });
+  }, []);
 
-      if (runningRef.current && !doneRef.current) {
-        tRef.current += delta * speedRef.current;
-        const option = cfg.options.find(
-          (item) => item.value === paramRef.current,
-        );
-
-        if (option) {
-          const runTime = runDuration(cfg, option.factor);
-          if (tRef.current >= runTime) {
-            tRef.current = runTime;
-            doneRef.current = true;
-            setDoneFlag(true);
-            setRunning(false);
-            finishRun();
+  // ---- simulation clock (real time; 1 s = 1 s) ----
+  useEffect(() => {
+    let raf = 0;
+    let lastUi = 0;
+    const loop = (now: number) => {
+      const s = sharedRef.current;
+      if (phaseRef.current === "inserting" && now - insertStartRef.current >= INSERT_MS) {
+        phaseRef.current = "reacting";
+        reactionStartRef.current = now;
+        setPhase("reacting");
+      }
+      if (phaseRef.current === "reacting") {
+        const p = Math.min(1, (now - reactionStartRef.current) / (durationRef.current * 1000));
+        s.progress = p;
+        if (p >= 1) {
+          phaseRef.current = "done";
+          setPhase("done");
+          if (swRef.current !== "running") {
+            setHint("Pita Mg habis, stopwatch belum dijalankan — tekan Ulangi.", "warn");
           }
         }
-
-        setSimT(tRef.current);
       }
-
-      frame = requestAnimationFrame(tick);
+      s.inserted = phaseRef.current !== "idle";
+      s.reacting = phaseRef.current === "reacting";
+      s.finished = phaseRef.current === "done";
+      if (swRef.current === "running") {
+        swElapsedRef.current = (now - swStartRef.current) / 1000;
+      }
+      if (now - lastUi >= 100) {
+        lastUi = now;
+        setElapsedUi(swElapsedRef.current);
+        setProgressUi(s.progress);
+      }
+      raf = requestAnimationFrame(loop);
     };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    };
+  }, [setHint]);
 
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [cfg, finishRun]);
+  // ---- actions ----
+  const selectParam = (value: string) => {
+    if (value === param) return;
+    if (swRef.current === "running") {
+      setHint("Hentikan stopwatch dulu.", "warn");
+      return;
+    }
+    resetRun();
+    setParam(value);
+  };
 
-  const resetRun = (nextParam?: string) => {
-    tRef.current = 0;
-    runningRef.current = false;
-    doneRef.current = false;
-    setSimT(0);
-    setDoneFlag(false);
-    setRunning(false);
-    setMagnifier(false);
-    setComparing(false);
-    if (nextParam) {
-      paramRef.current = nextParam;
-      setParam(nextParam);
+  const insertMg = () => {
+    if (phaseRef.current !== "idle" || !param) return;
+    phaseRef.current = "inserting";
+    insertStartRef.current = performance.now();
+    setPhase("inserting");
+    setHint("Tekan ▶ saat gelembung muncul.");
+  };
+
+  const pressStopwatch = () => {
+    const now = performance.now();
+    if (swRef.current === "off") {
+      if (phaseRef.current === "idle" || phaseRef.current === "inserting") {
+        setHint("Masukkan pita Mg dulu.", "warn");
+        return;
+      }
+      if (phaseRef.current === "done") {
+        setHint("Mg sudah habis — tekan Ulangi.", "warn");
+        return;
+      }
+      swRef.current = "running";
+      swStartRef.current = now;
+      setSw("running");
+      const lateSec = (now - reactionStartRef.current) / 1000;
+      if (lateSec > LATE_FRACTION * durationRef.current) {
+        setHint("Stopwatch mulai terlambat; Ulangi untuk data lebih akurat.", "warn");
+      } else {
+        setHintState(null);
+      }
+      return;
+    }
+    if (swRef.current === "running") {
+      if (phaseRef.current !== "done") {
+        setHint("Pita Mg belum habis.", "warn");
+        return;
+      }
+      swRef.current = "stopped";
+      const elapsed = (now - swStartRef.current) / 1000;
+      swElapsedRef.current = elapsed;
+      setSw("stopped");
+      setElapsedUi(elapsed);
+      const timeSec = Math.max(0.1, Math.round(elapsed * 10) / 10);
+      const rate = 1 / timeSec;
+      const run: ExperimentRun = {
+        id: `${param}-${Date.now()}`,
+        paramValue: param,
+        label: concentrationLabel(conc, cfg.paramUnit),
+        timeSec,
+        rate,
+        rateLabel: `${rate.toFixed(4)} ${cfg.rateUnit}`,
+        at: Date.now(),
+      };
+      if (readOnly) {
+        setHint("Pemutaran ulang — data tersimpan tidak diubah.");
+      } else {
+        onRunDone(run);
+        setHint(`Tercatat: ${fmtSeconds(timeSec)} s`, "ok");
+      }
+      return;
+    }
+    setHint("Tekan Ulangi untuk mengukur lagi.");
+  };
+
+  const toggleMicro = () => {
+    const next = !micro;
+    sharedRef.current.micro = next;
+    setMicro(next);
+  };
+
+  const closeTutorial = (completed: boolean) => {
+    setTutorialOpen(false);
+    if (completed) {
+      setTutorialMandatory(false);
+      if (!tutorialSeen) onTutorialSeen();
     }
   };
 
-  const completedCount = options.filter((option) =>
-    Boolean(runs[runKey(option.value)]),
-  ).length;
-
-  const stateLabel = doneFlag
-    ? "Percobaan selesai"
-    : running
-      ? "Reaksi berlangsung"
-      : simT > 0
-        ? "Simulasi dijeda"
-        : "Siap dimulai";
+  const completedCount = ordered.filter((v) => Boolean(runs[safeKey(v)])).length;
+  const currentRun = param ? runs[safeKey(param)] : undefined;
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-brand-600 shadow-sm ring-1 ring-slate-200">
-              <FlaskConical className="h-4 w-4" />
-            </span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                Rak kondisi terpilih
-              </p>
-              <p className="text-xs font-semibold text-slate-600">
-                20 mL HCl, suhu, dan pita Mg 0,10 g dikontrol tetap
-              </p>
-            </div>
-          </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
-            {completedCount}/{options.length} selesai
-          </span>
-        </div>
-
-        <div className="thin-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-6">
-          {options.map((option) => {
-            const done = Boolean(runs[runKey(option.value)]);
-            const active = option.value === param;
-
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => resetRun(option.value)}
-                disabled={running}
-                aria-pressed={active}
-                className={cn(
-                  "group relative min-h-14 min-w-[132px] snap-start overflow-hidden rounded-xl border px-3 py-2 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-0",
-                  active
-                    ? "border-brand-500 bg-brand-600 text-white shadow-md shadow-brand-200/70"
-                    : done
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300"
-                      : "border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-sm",
-                )}
-              >
-                <span
-                  className={cn(
-                    "block text-[9px] font-black uppercase tracking-wider",
-                    active ? "text-brand-100" : "text-slate-400",
-                  )}
-                >
-                  {done ? "Data tersimpan" : active ? "Aktif" : "Belum diuji"}
-                </span>
-                <span className="mt-0.5 block text-sm font-black">{option.label}</span>
-                {done && (
-                  <CheckCircle2
-                    className={cn(
-                      "absolute right-2 top-2 h-4 w-4",
-                      active ? "text-white" : "text-emerald-500",
-                    )}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_55px_-34px_rgba(15,23,42,0.55)]">
-        <div className="min-w-0 bg-slate-950">
-          <M1LabApparatus
-            factor={opt?.factor ?? 1}
-            label={opt?.label ?? ""}
-            progress={progress}
-            simTime={simT}
-            duration={duration}
-            running={running}
-            started={started}
-            playbackRate={speed}
-            magnifierOpen={magnifier}
-            zoomEnabled={zoomEnabled}
-            onZoomModeToggle={() => {
-              if (zoomEnabled) setMagnifier(false);
-              setZoomEnabled(!zoomEnabled);
-            }}
-            onMagnifierClick={() => {
-              setMagnifier((value) => !value);
-              setComparing(false);
-            }}
-            lensOverlay={
-              magnifier && opt ? (
-                <div className="absolute inset-0 z-30 flex items-start justify-center px-2 pt-3 sm:px-4 sm:pt-5">
-                  <button
-                    type="button"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    onClick={() => setMagnifier(false)}
-                    className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
-                  />
-                  <div
-                    id="m1-particle-panel"
-                    role="dialog"
-                    aria-label={`Lensa submikroskopik HCl ${opt.label} pada permukaan magnesium`}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") setMagnifier(false);
-                    }}
-                    className="relative z-10 aspect-square h-[72%] max-h-[340px] max-w-[86%] rounded-full border-[5px] border-white bg-sky-50 shadow-[0_22px_60px_rgba(0,0,0,0.48)] ring-2 ring-slate-900/70 sm:h-[78%]"
-                  >
-                    <M1ParticleLens
-                      factor={opt.factor}
-                      maxFactor={maxFactor}
-                      diameter={340}
-                      progress={progress}
-                      running={running}
-                      playbackRate={speed}
-                      label={opt.label}
-                      showHeader={false}
-                      showLegend={false}
-                      showFrequency={false}
-                      className="h-full w-full"
-                    />
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute bottom-[5%] left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-white/80 bg-white/90 px-2.5 py-1.5 text-[8px] font-black text-slate-700 shadow-lg backdrop-blur-sm sm:gap-3 sm:text-[9px]"
-                    >
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-500" />H⁺</span>
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-cyan-400" />Cl⁻</span>
-                      <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-slate-400" />Mg</span>
-                      <span className="text-indigo-700">{opt.label}</span>
-                    </div>
-                    <button
-                      type="button"
-                      autoFocus
-                      onClick={() => setMagnifier(false)}
-                      aria-label="Tutup lensa submikroskopik"
-                      className="absolute right-[2%] top-[2%] z-20 flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-slate-950/85 text-white shadow-lg transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
-              ) : null
-            }
+    <div className="space-y-3">
+      {/* ---------------- 3D stage ---------------- */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative h-[88vw] max-h-[460px] min-h-[320px] sm:h-[380px] lg:h-[440px]">
+          <M1Scene3D
+            shared={sharedRef}
+            micro={micro}
+            onStats={setStats}
+            className="absolute inset-0"
           />
-        </div>
-      </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-            {!running ? (
-              <Button
-                size="sm"
-                onClick={() => setRunning(true)}
-                disabled={doneFlag || !opt}
-                className="min-h-11 w-full sm:min-w-28"
-              >
-                <Play className="h-4 w-4" />
-                {simT > 0 ? "Lanjutkan" : "Mulai"}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setRunning(false)}
-                className="min-h-11 w-full sm:min-w-28"
-              >
-                <Pause className="h-4 w-4" /> Jeda
-              </Button>
-            )}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => resetRun()}
-              className="min-h-11 w-full sm:w-auto"
-            >
-              <RotateCcw className="h-4 w-4" /> Ulangi
-            </Button>
-          </div>
-
-          <div className="hidden h-8 w-px bg-slate-200 lg:block" />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              <Gauge className="h-3.5 w-3.5" /> Kecepatan pemutaran
+          {/* concentration + fixed volume (top-left) */}
+          <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+            <span className="rounded-full border border-white/80 bg-white/90 px-3 py-1.5 text-sm font-black tabular-nums text-slate-900 shadow-sm backdrop-blur">
+              {param ? concentrationLabel(conc, cfg.paramUnit) : "—"}
             </span>
-            <div
-              className="inline-flex rounded-xl bg-slate-100 p-1"
-              role="group"
-              aria-label="Kecepatan pemutaran simulasi"
-            >
-              {[1, 3, 6].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setSpeed(value)}
-                  aria-pressed={speed === value}
-                  className={cn(
-                    "min-h-11 min-w-11 rounded-lg px-2.5 py-1 text-xs font-black transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50",
-                    speed === value
-                      ? "bg-white text-brand-700 shadow-sm ring-1 ring-slate-200"
-                      : "text-slate-400 hover:text-slate-700",
-                  )}
-                >
-                  {value}×
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1 lg:px-2">
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] font-bold">
-              <span
-                role="status"
-                aria-live="polite"
-                className={cn(
-                  "inline-flex items-center gap-1.5",
-                  doneFlag
-                    ? "text-emerald-600"
-                    : running
-                      ? "text-brand-600"
-                      : "text-slate-500",
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full",
-                    doneFlag
-                      ? "bg-emerald-500"
-                      : running
-                        ? "animate-pulse bg-brand-500"
-                        : "bg-slate-300",
-                  )}
-                />
-                {stateLabel}
-              </span>
-              <span className="tabular-nums text-slate-400">
-                {Math.round(progress * 100)}%
-              </span>
-            </div>
-            <div
-              className="h-2 overflow-hidden rounded-full bg-slate-100"
-              role="progressbar"
-              aria-label="Kemajuan reaksi"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress * 100)}
-            >
-              <div
-                className={cn(
-                  "h-full rounded-full transition-[width] duration-150",
-                  doneFlag
-                    ? "bg-emerald-500"
-                    : "bg-gradient-to-r from-brand-500 to-indigo-500",
-                )}
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-white shadow-inner sm:w-auto">
-            <Timer className="h-4 w-4 text-cyan-300" />
-            <span className="font-mono text-base font-black tabular-nums">
-              {simT.toFixed(1)}
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              detik
+            <span className="rounded-full bg-slate-900/70 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+              20 mL
             </span>
           </div>
-        </div>
-      </div>
 
-      <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3.5 py-2.5 text-xs leading-relaxed text-sky-900">
-        <b>Prosedur terkendali:</b> {cfg.stageNote}
-      </div>
-
-      {doneFlag && (
-        <div
-          className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
-          role="status"
-          aria-live="polite"
-        >
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-          <p>
-            <b>{readOnly ? "Pemutaran ulang" : "Percobaan"} {opt?.label} selesai.</b>{" "}
-            {readOnly
-              ? "Data hasil yang sudah tersimpan tidak diubah. Tekan Ulangi atau pilih kondisi lain untuk terus mengeksplorasi."
-              : "Waktu dan indikator laju sudah otomatis tercatat. Pilih kondisi lain untuk melanjutkan."}
-          </p>
-        </div>
-      )}
-
-      {completedCount >= 2 && !comparing && !running && (
-        <button
-          type="button"
-          onClick={() => {
-            setComparing(true);
-            setMagnifier(false);
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-        >
-          <GitCompareArrows className="h-4 w-4" />
-          Bandingkan kerapatan partikel
-        </button>
-      )}
-
-      {comparing && (
-        <div>
-          <M1CompareView
-            cfg={cfg}
-            runs={runs}
-            maxFactor={maxFactor}
-            selected={selected}
-          />
+          {/* tutorial replay (top-right) */}
           <button
             type="button"
-            onClick={() => setComparing(false)}
-            className="mt-2 rounded text-xs font-semibold text-slate-400 underline decoration-slate-300 underline-offset-2 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+            onClick={() => {
+              setTutorialMandatory(false);
+              setTutorialOpen(true);
+            }}
+            aria-label="Lihat tutorial"
+            className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-brand-700 shadow-sm backdrop-blur hover:bg-white"
           >
-            Tutup perbandingan
+            <CircleHelp className="h-5 w-5" />
+          </button>
+
+          {/* collision stats (micro only, bottom-left) */}
+          {micro && (
+            <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1.5 sm:flex-row">
+              <span
+                title="Tumbukan efektif"
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-black tabular-nums text-amber-950 shadow"
+              >
+                <Zap className="h-3.5 w-3.5" /> {stats.effective}
+                <span className="font-semibold opacity-80">efektif</span>
+              </span>
+              <span
+                title="Tumbukan tidak efektif"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-black tabular-nums text-slate-700 shadow backdrop-blur"
+              >
+                <Circle className="h-3.5 w-3.5 text-slate-400" /> {stats.ineffective}
+                <span className="font-semibold opacity-80">tidak</span>
+              </span>
+            </div>
+          )}
+
+          {/* state pill (bottom-left, macro only) — one short label */}
+          {phase === "done" && !micro && (
+            <span className="pointer-events-none absolute bottom-3 left-3 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-black text-white shadow">
+              Pita Mg habis
+            </span>
+          )}
+
+          {/* Perbesar toggle (bottom-right) */}
+          <button
+            type="button"
+            onClick={toggleMicro}
+            aria-pressed={micro}
+            className={cn(
+              "absolute bottom-3 right-3 inline-flex h-12 items-center gap-2 rounded-full px-4 text-sm font-black shadow-lg transition-colors",
+              micro
+                ? "bg-slate-900 text-white hover:bg-slate-800"
+                : "bg-brand-600 text-white hover:bg-brand-700"
+            )}
+          >
+            {micro ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+            {micro ? "Kembali" : "Perbesar"}
+          </button>
+
+          {/* Mg remaining (thin bar, no text) */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-slate-200/70">
+            <div
+              className={cn("h-full transition-[width]", phase === "done" ? "bg-emerald-500" : "bg-brand-500")}
+              style={{ width: `${Math.round((1 - progressUi) * 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------- concentration chips ---------------- */}
+      <div className="thin-scroll -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {ordered.map((value) => {
+          const run = runs[safeKey(value)];
+          const active = value === param;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => selectParam(value)}
+              aria-pressed={active}
+              className={cn(
+                "flex min-h-12 min-w-[96px] shrink-0 snap-start flex-col items-center justify-center rounded-2xl border px-3 py-1.5 transition-colors",
+                active
+                  ? "border-brand-600 bg-brand-600 text-white shadow-md shadow-brand-200"
+                  : run
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-brand-300"
+              )}
+            >
+              <span className="text-sm font-black tabular-nums leading-tight">
+                {concentrationLabel(parseFloat(value), cfg.paramUnit)}
+              </span>
+              <span
+                className={cn(
+                  "mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums",
+                  active ? "text-brand-100" : run ? "text-emerald-700" : "text-slate-400"
+                )}
+              >
+                {run ? (
+                  <>
+                    <Check className="h-3 w-3" /> {fmtSeconds(run.timeSec ?? 0)} s
+                  </>
+                ) : (
+                  "—"
+                )}
+              </span>
+            </button>
+          );
+        })}
+        <span className="ml-auto hidden shrink-0 self-center text-[11px] font-bold text-slate-400 sm:block">
+          {completedCount}/{ordered.length}
+        </span>
+      </div>
+
+      {/* ---------------- controls ---------------- */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(240px,340px)_auto_auto] sm:items-stretch">
+        {/* stopwatch */}
+        <div className="col-span-2 flex items-center justify-between gap-3 rounded-2xl bg-slate-950 px-4 py-3 text-white sm:col-span-1">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-3xl font-black tabular-nums leading-none">
+              {fmtSeconds(elapsedUi)}
+            </span>
+            <span className="text-xs font-bold text-slate-400">s</span>
+          </div>
+          <button
+            type="button"
+            onClick={pressStopwatch}
+            disabled={sw === "stopped"}
+            aria-label={
+              sw === "running" ? "Hentikan stopwatch" : sw === "off" ? "Mulai stopwatch" : "Stopwatch selesai"
+            }
+            className={cn(
+              "relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full shadow-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white",
+              sw === "running"
+                ? "bg-rose-500 text-white hover:bg-rose-600"
+                : sw === "stopped"
+                  ? "bg-emerald-500 text-white"
+                  : phase === "reacting"
+                    ? "bg-brand-500 text-white hover:bg-brand-400"
+                    : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+            )}
+          >
+            {sw === "running" && (
+              <span className="absolute inset-0 animate-ping rounded-full bg-rose-400/40" />
+            )}
+            {sw === "running" ? (
+              <Square className="h-6 w-6 fill-current" />
+            ) : sw === "stopped" ? (
+              <Check className="h-6 w-6" />
+            ) : (
+              <Play className="h-6 w-6 fill-current" />
+            )}
           </button>
         </div>
-      )}
 
-      {completedCount >= 1 && completedCount < options.length && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm leading-relaxed text-amber-950">
-          <b>Pertanyaan pengamatan:</b> Dalam volume cuplikan yang sama, apa
-          perbedaan kerapatan ion asam pada konsentrasi berbeda? Bagaimana hal itu
-          memengaruhi frekuensi tumbukan ion asam dengan permukaan Mg per satuan
-          waktu?
-        </div>
-      )}
+        {/* insert Mg */}
+        <Button
+          variant={phase === "idle" ? "primary" : "secondary"}
+          disabled={phase !== "idle" || !param}
+          onClick={insertMg}
+          className="min-h-12 whitespace-nowrap px-3"
+        >
+          <Pipette className="h-4 w-4 shrink-0" /> Masukkan Mg
+        </Button>
+
+        {/* redo */}
+        <Button
+          variant="secondary"
+          onClick={() => {
+            resetRun();
+            setHintState(null);
+          }}
+          disabled={phase === "idle" && sw === "off" && !currentRun}
+          className="min-h-12 whitespace-nowrap px-3"
+        >
+          <RotateCcw className="h-4 w-4 shrink-0" /> Ulangi
+        </Button>
+      </div>
+
+      {/* ---------------- one-line hint ---------------- */}
+      <p
+        role="status"
+        aria-live="polite"
+        className={cn(
+          "min-h-5 text-center text-xs font-semibold transition-opacity",
+          !hint && "opacity-0",
+          hint?.tone === "warn" && "text-amber-700",
+          hint?.tone === "ok" && "text-emerald-700",
+          hint?.tone === "info" && "text-slate-500"
+        )}
+      >
+        {hint?.text ?? " "}
+      </p>
+
+      <M1Tutorial open={tutorialOpen} mandatory={tutorialMandatory} onClose={closeTutorial} />
     </div>
   );
 }

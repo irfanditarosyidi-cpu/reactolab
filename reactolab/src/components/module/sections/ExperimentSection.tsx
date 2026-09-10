@@ -85,9 +85,16 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
   const d = (drafts[sec.id] ?? {}) as ExperimentDraft;
   const [busy, setBusy] = useState(false);
 
-  const selected = (d.selected ?? []).filter((value) =>
-    cfg.options.some((option) => option.value === value),
-  );
+  // Module 1 stores student-defined concentrations (validated against the
+  // allowed range); other modules keep preset option values.
+  const customRange = cfg.customRange;
+  const selected = (d.selected ?? []).filter((value) => {
+    if (customRange) {
+      const n = parseFloat(value);
+      return Number.isFinite(n) && n >= customRange.min - 1e-9 && n <= customRange.max + 1e-9;
+    }
+    return cfg.options.some((option) => option.value === value);
+  });
   const setupLocked = Boolean(d.setupLocked);
   const doneRuns = orderedRuns(cfg, runs);
   const allRunsDone =
@@ -124,7 +131,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
         n="A"
         title={
           moduleId === 1
-            ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} kondisi`
+            ? `Persiapan — tentukan minimal ${cfg.minSelections} konsentrasi HCl`
             : moduleId === 2
               ? `Persiapan Alat & Bahan — pilih minimal ${cfg.minSelections} bentuk CaCO₃`
             : moduleId === 3
@@ -133,13 +140,17 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
         }
         state={stepState(true, setupLocked)}
       >
-        {moduleId === 1 ? (
+        {moduleId === 1 && customRange ? (
           <M1ExperimentSetup
-            options={cfg.options}
+            range={customRange}
+            minSelections={cfg.minSelections}
             selected={selected}
             locked={setupLocked}
             readOnly={readOnly}
-            onToggle={toggleOption}
+            onChange={(values) => {
+              if (readOnly || setupLocked) return;
+              updateDraft(sec.id, { selected: values });
+            }}
           />
         ) : moduleId === 2 ? (
           <M2ExperimentSetup
@@ -208,7 +219,9 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
       <SubStep
         n="B"
         title={
-          moduleId === 2
+          moduleId === 1
+            ? "Simulasi 3D + Perbesar Partikel"
+            : moduleId === 2
             ? "Simulasi Pendesakan Air + Zoom Permukaan Submikroskopik"
             : moduleId === 3
               ? "Simulasi Tanda X + Zoom Tumbukan Submikroskopik"
@@ -225,6 +238,8 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             runs={runs}
             readOnly={readOnly}
             onRunDone={(run) => void recordRun(run)}
+            tutorialSeen={Boolean(d.m1TutorialSeen)}
+            onTutorialSeen={() => updateDraft(sec.id, { m1TutorialSeen: true })}
           />
         ) : moduleId === 2 ? (
           <M2SimStage
@@ -254,8 +269,14 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
         )}
         {!allRunsDone && (
           <Help>
-            Jalankan simulasi untuk <b>semua</b> kondisi yang kamu pilih. Data akan
-            tercatat otomatis.
+            {moduleId === 1 ? (
+              <>Ukur waktu untuk <b>setiap</b> konsentrasi; data tercatat otomatis.</>
+            ) : (
+              <>
+                Jalankan simulasi untuk <b>semua</b> kondisi yang kamu pilih. Data akan
+                tercatat otomatis.
+              </>
+            )}
           </Help>
         )}
       </SubStep>

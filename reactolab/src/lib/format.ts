@@ -2,6 +2,7 @@
 // read-only detail view and the LKPD PDF generator.
 
 import { MODULES, type ModuleDef } from "./module-defs";
+import { sortRuns } from "./runs";
 import type { ExperimentRun } from "./types";
 
 export interface QA {
@@ -41,9 +42,9 @@ export function runsOf(
     | Record<string, ExperimentRun>
     | undefined;
   if (!modExp || !def.experiment) return [];
-  return def.experiment.options
-    .map((o) => modExp[o.value.replace(/[.#$/[\]]/g, "_")])
-    .filter(Boolean) as ExperimentRun[];
+  // Generic ordering: works for student-defined concentrations (Module 1) as
+  // well as preset options (Modules 2–4 and legacy Module 1 data).
+  return sortRuns(def.experiment, modExp);
 }
 
 export function buildModuleReport(

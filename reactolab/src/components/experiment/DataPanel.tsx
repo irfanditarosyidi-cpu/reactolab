@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
+import { runNumericValue, sortRuns } from "@/lib/runs";
 
 export const CHART_COLORS = [
   "#2563eb",
@@ -26,13 +27,12 @@ export const CHART_COLORS = [
   "#ef4444",
 ];
 
+/** Runs in display order — supports custom (non-preset) parameter values. */
 export function orderedRuns(
   cfg: ExperimentConfig,
   runs: Record<string, ExperimentRun>
 ): ExperimentRun[] {
-  return cfg.options
-    .map((o) => runs[o.value.replace(/[.#$/[\]]/g, "_")])
-    .filter(Boolean) as ExperimentRun[];
+  return sortRuns(cfg, runs);
 }
 
 export default function DataPanel({
@@ -69,9 +69,7 @@ export default function DataPanel({
 
   const rateRows = list.map((r) => ({
     name: r.label,
-    x: cfg.numericParam
-      ? (cfg.options.find((o) => o.value === r.paramValue)?.factor ?? 0)
-      : r.label,
+    x: cfg.numericParam ? runNumericValue(cfg, r) : r.label,
     waktu: r.timeSec ?? 0,
     laju: Number(r.rate.toFixed(4)),
   }));

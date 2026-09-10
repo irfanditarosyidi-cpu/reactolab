@@ -157,10 +157,13 @@ export interface HypothesisDraft {
 }
 export interface ExperimentDraft {
   setupLocked?: boolean;
+  /** Chosen parameter values. Module 1 stores custom concentrations ("1.25"). */
   selected?: string[];
   symbolicAnswer?: string;
   symbolicOk?: boolean;
   explain?: { makro?: string; submikro?: string; simbolik?: string };
+  /** Module 1: the step-by-step simulation tutorial has been completed once. */
+  m1TutorialSeen?: boolean;
 }
 export interface HypoTestDraft {
   verdict?: "terbukti" | "tidak_terbukti";
