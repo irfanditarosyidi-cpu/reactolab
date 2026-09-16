@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Home, Save } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Badge, ProgressBar } from "@/components/ui/misc";
-import { TOTAL_MODULES, getModuleDef, sectionDef } from "@/lib/module-defs";
+import { getModuleDef, sectionDef } from "@/lib/module-defs";
 import { useEngine } from "./engine";
 import SectionCard from "./SectionCard";
 import SaveIndicator from "./SaveIndicator";
@@ -21,7 +21,7 @@ export default function ModulePageView() {
   const activeSection = modProgress.currentSection
     ? sectionDef(def, modProgress.currentSection)
     : null;
-  const nextDef = moduleId < TOTAL_MODULES - 1 ? getModuleDef(moduleId + 1) : null;
+  const nextDef = getModuleDef(moduleId + 1) ?? null;
 
   return (
     <div className="space-y-5 pb-24">
@@ -76,6 +76,7 @@ export default function ModulePageView() {
             index={i + 1}
             title={s.title}
             status={status}
+            defaultOpen={moduleId === 6 && s.id === "sectionCases"}
           >
             {renderSection(s, status === "completed")}
           </SectionCard>

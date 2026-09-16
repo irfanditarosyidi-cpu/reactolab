@@ -5,6 +5,8 @@ export const P = {
   user: (uid: string) => `users/${uid}`,
   classes: "classes",
   class: (cid: string) => `classes/${cid}`,
+  orientationMedia: (cid: string, moduleId: number) =>
+    `classes/${cid}/orientationMedia/${moduleId}`,
   classCodes: "classCodes",
   classCode: (code: string) => `classCodes/${code}`,
   members: (cid: string) => `classMemberships/${cid}`,
@@ -33,6 +35,8 @@ export const P = {
   grade: (cid: string, uid: string) => `grades/${cid}/${uid}`,
   moduleGrade: (cid: string, uid: string, m: number) =>
     `grades/${cid}/${uid}/m${m}`,
+  practiceConfigs: "practiceConfigs",
+  practiceConfig: (cid: string) => `practiceConfigs/${cid}`,
   resetRequests: "passwordResetRequests",
   audit: "auditLogs",
 };

@@ -20,6 +20,32 @@ const SUBSCRIPTS: Record<string, string> = {
   "₉": "9",
 };
 
+const DIGIT_SUBSCRIPTS: Record<string, string> = {
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
+};
+
+/** Keep stoichiometric coefficients normal while formatting formula indices. */
+export function formatChemicalSubscripts(value: string): string {
+  return value.replace(/\d+/g, (digits, offset, source: string) => {
+    const previous = source[offset - 1] ?? "";
+    const isFormulaIndex = /[A-Za-z)\]₀-₉]/.test(previous);
+    if (!isFormulaIndex) return digits;
+    return digits
+      .split("")
+      .map((digit) => DIGIT_SUBSCRIPTS[digit] ?? digit)
+      .join("");
+  });
+}
+
 function normalizeFragments(answer: string): string[] {
   let s = answer.toLowerCase();
   for (const [sub, digit] of Object.entries(SUBSCRIPTS)) {
@@ -66,13 +92,12 @@ export function SymbolicPanel({
           <span>{cfg.reactionLeft}</span>
           <Input
             className="w-full sm:w-80 font-mono"
-            value={answer}
+            value={formatChemicalSubscripts(answer)}
             disabled={readOnly || ok}
             onChange={(e) => {
-              onChange(e.target.value);
+              onChange(formatChemicalSubscripts(e.target.value));
               setFeedback("");
             }}
-            placeholder="tuliskan hasil reaksi, cth: XY(aq) + Z(g)"
           />
         </div>
         {!ok && !readOnly && (

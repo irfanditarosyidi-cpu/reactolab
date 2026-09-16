@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   BookOpen,
+  Clapperboard,
   ClipboardList,
   FlaskConical,
   History,
@@ -41,6 +42,12 @@ const NAV: Record<Role, NavItem[]> = {
   teacher: [
     { href: "/teacher/dashboard", label: "Dashboard Guru", icon: LayoutDashboard },
     { href: "/teacher/classes", label: "Kelas", icon: Users },
+    { href: "/teacher/practice", label: "Latihan Soal", icon: ClipboardList },
+    {
+      href: "/teacher/orientation-videos",
+      label: "Video Orientasi",
+      icon: Clapperboard,
+    },
     { href: "/teacher/monitoring", label: "Monitoring Siswa", icon: MonitorCheck },
     { href: "/teacher/discussion", label: "Forum Diskusi", icon: MessagesSquare },
     { href: "/teacher/settings", label: "Settings", icon: Settings },
@@ -85,10 +92,18 @@ function isNavItemActive(pathname: string | null, href: string): boolean {
     );
   }
 
-  // Kelas should NOT be active when viewing monitoring or discussion under a class
+  // Practice settings can be opened from the global picker or a class detail.
+  if (href === "/teacher/practice") {
+    return (
+      pathname.startsWith("/teacher/practice/") ||
+      /\/teacher\/classes\/[^/]+\/practice(\/.*)?$/.test(pathname)
+    );
+  }
+
+  // Kelas should NOT be active when viewing a feature under a class.
   if (href === "/teacher/classes") {
     if (
-      /\/teacher\/classes\/[^/]+\/(monitoring|discussion)(\/.*)?$/.test(pathname)
+      /\/teacher\/classes\/[^/]+\/(monitoring|discussion|practice)(\/.*)?$/.test(pathname)
     ) {
       return false;
     }

@@ -138,7 +138,7 @@ export default function TeacherStudentDetail() {
               <b className="text-slate-600">
                 {progress?.currentSection
                   ? `Modul ${progress.currentModule} · ${progress.currentSection.replace("section", "Bagian ")}`
-                  : `Modul ${progress?.currentModule ?? 0}`}
+                  : `Modul ${progress?.currentModule ?? 1}`}
               </b>
             </p>
           </div>

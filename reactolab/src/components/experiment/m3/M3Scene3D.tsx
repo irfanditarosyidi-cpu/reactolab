@@ -49,6 +49,7 @@ export interface M3Stats {
 interface Props {
   shared: MutableRefObject<M3SimShared>;
   micro: boolean;
+  phase: M3Phase;
   onStats?: (s: M3Stats) => void;
   className?: string;
 }
@@ -76,8 +77,10 @@ const H_COUNT = 26;
 const S_R = 0.17;
 const H_R = 0.09;
 const FLASH_POOL = 24;
-const PRODUCT_POOL = 16;
+const PRODUCT_POOL = 48;
+const PRODUCT_R = 0.075;
 const MICRO = { x: 2.2, yMin: 0.2, yMax: 2.8, z: 1.2 };
+const MICRO_FLOOR_Y = MICRO.yMin - 0.3;
 
 type TObject = InstanceType<typeof THREE.Object3D>;
 type TInstanced = InstanceType<typeof THREE.InstancedMesh>;
@@ -171,7 +174,7 @@ function makeSoftShadow(): HTMLCanvasElement {
   return c;
 }
 
-export default memo(function M3Scene3D({ shared, micro, onStats, className }: Props) {
+export default memo(function M3Scene3D({ shared, micro, phase, onStats, className }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [fallback, setFallback] = useState(false);
   const onStatsRef = useRef(onStats);
@@ -444,11 +447,11 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
       track(new THREE.MeshPhysicalMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0.4, roughness: 0.2, depthWrite: false }))
     );
     microFloor.rotation.x = -Math.PI / 2;
-    microFloor.position.y = MICRO.yMin - 0.3;
+    microFloor.position.y = MICRO_FLOOR_Y;
     microG.add(microFloor);
     const sMesh: TInstanced = new THREE.InstancedMesh(
       track(new THREE.SphereGeometry(S_R, 18, 14)),
-      track(new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35 })),
+      track(new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.35 })),
       S_COUNT
     );
     const hMesh: TInstanced = new THREE.InstancedMesh(
@@ -503,20 +506,34 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
       f.mesh.scale.setScalar(1);
       f.mesh.visible = true;
     };
-    const productGeo = track(new THREE.SphereGeometry(0.075, 10, 8));
+    const productGeo = track(new THREE.SphereGeometry(PRODUCT_R, 10, 8));
     const products = Array.from({ length: PRODUCT_POOL }, () => {
       const mat = track(new THREE.MeshStandardMaterial({ color: 0xfcd34d, transparent: true, opacity: 0.9, roughness: 0.8 }));
       const m = new THREE.Mesh(productGeo, mat);
       m.visible = false;
       microG.add(m);
-      return { mesh: m as TMesh, mat, age: 0, active: false };
+      return {
+        mesh: m as TMesh,
+        mat,
+        active: false,
+        settled: false,
+        fallSpeed: 0,
+        driftX: 0,
+        driftZ: 0,
+        settleY: MICRO_FLOOR_Y + PRODUCT_R,
+      };
     });
     let productCursor = 0;
     const spawnProduct = (x: number, y: number, z: number) => {
       const p = products[productCursor++ % PRODUCT_POOL];
       p.active = true;
-      p.age = 0;
+      p.settled = false;
+      p.fallSpeed = rand(0.12, 0.22);
+      p.driftX = rand(-0.08, 0.08);
+      p.driftZ = rand(-0.08, 0.08);
+      p.settleY = MICRO_FLOOR_Y + PRODUCT_R + rand(0, 0.025);
       p.mesh.position.set(x, y, z);
+      p.mesh.scale.setScalar(rand(0.85, 1.2));
       p.mat.opacity = 0.9;
       p.mesh.visible = true;
     };
@@ -537,6 +554,8 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
       }
       for (const p of products) {
         p.active = false;
+        p.settled = false;
+        p.fallSpeed = 0;
         p.mesh.visible = false;
       }
       stats.effective = 0;
@@ -628,6 +647,9 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
 
       macro.visible = !s.micro;
       microG.visible = s.micro;
+      const mixtureReady = s.phase === "reacting" || s.phase === "done";
+      sMesh.visible = mixtureReady;
+      hMesh.visible = mixtureReady;
 
       // ---------- MACRO ----------
       if (!s.micro) {
@@ -751,7 +773,7 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
       }
 
       // ---------- MICRO ----------
-      if (s.micro) {
+      if (s.micro && mixtureReady) {
         const speed = particleSpeed(s.microTemp);
         const pEff = effectiveChance(s.microTemp);
         for (let i = 0; i < N; i++) {
@@ -844,14 +866,22 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
         }
         for (const p of products) {
           if (!p.active) continue;
-          p.age += dt;
-          p.mesh.position.y -= 0.25 * dt;
-          if (p.age > 2.2 || p.mesh.position.y < MICRO.yMin - 0.1) {
-            p.active = false;
-            p.mesh.visible = false;
-            continue;
+          if (!p.settled) {
+            p.fallSpeed = Math.min(0.9, p.fallSpeed + 0.42 * dt);
+            p.mesh.position.x += p.driftX * dt;
+            p.mesh.position.y -= p.fallSpeed * dt;
+            p.mesh.position.z += p.driftZ * dt;
+            p.driftX *= Math.exp(-dt * 1.8);
+            p.driftZ *= Math.exp(-dt * 1.8);
+            if (p.mesh.position.y <= p.settleY) {
+              p.mesh.position.y = p.settleY;
+              p.fallSpeed = 0;
+              p.driftX = 0;
+              p.driftZ = 0;
+              p.settled = true;
+            }
           }
-          p.mat.opacity = 0.9 * (1 - Math.max(0, (p.age - 1.4) / 0.8));
+          p.mat.opacity = p.settled ? 1 : 0.9;
         }
         statsTimer += dt;
         if (statsDirty && statsTimer >= 0.25) {
@@ -933,12 +963,27 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dots = Array.from({ length: 30 }, (_, i) => ({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, big: i < 10 }));
+    const fallbackProducts = Array.from({ length: 32 }, () => ({
+      x: 0,
+      y: 0,
+      vy: 0,
+      active: false,
+      settled: false,
+    }));
+    let productCursor = 0;
+    let productClock = 0;
+    let lastReset = shared.current.resetToken;
     let raf = 0;
     let last = performance.now();
     const draw = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const s = shared.current;
+      if (s.resetToken !== lastReset) {
+        lastReset = s.resetToken;
+        productClock = 0;
+        for (const p of fallbackProducts) p.active = false;
+      }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const W = host.clientWidth;
       const H = host.clientHeight;
@@ -978,17 +1023,47 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
         ctx.textAlign = "center";
         ctx.fillText(`${s.tempA.toFixed(1)} °C`, W * 0.2, base - 100);
         ctx.fillText(`${s.tempB.toFixed(1)} °C`, W * 0.4, base - 100);
-      } else {
+      } else if (s.phase === "reacting" || s.phase === "done") {
         const sp = particleSpeed(s.microTemp) * 0.12;
         for (const d of dots) {
           d.x += d.vx * sp * dt * 4;
           d.y += d.vy * sp * dt * 4;
           if (d.x < 0.02 || d.x > 0.98) d.vx *= -1;
           if (d.y < 0.05 || d.y > 0.9) d.vy *= -1;
-          ctx.fillStyle = d.big ? "#f59e0b" : "#ef4444";
+          ctx.fillStyle = d.big ? "#2563eb" : "#ef4444";
           ctx.beginPath();
           ctx.arc(d.x * W, d.y * H, d.big ? 9 : 5, 0, Math.PI * 2);
           ctx.fill();
+        }
+        const formationRate = 0.7 + clamp01((s.microTemp - 10) / 50) * 1.5;
+        productClock += dt * formationRate;
+        while (productClock >= 1) {
+          productClock -= 1;
+          const p = fallbackProducts[productCursor++ % fallbackProducts.length];
+          p.x = rand(0.12, 0.88);
+          p.y = rand(0.12, 0.55);
+          p.vy = rand(0.08, 0.14);
+          p.active = true;
+          p.settled = false;
+        }
+        for (const p of fallbackProducts) {
+          if (!p.active) continue;
+          if (!p.settled) {
+            p.vy = Math.min(0.42, p.vy + 0.16 * dt);
+            p.y += p.vy * dt;
+            if (p.y >= 0.9) {
+              p.y = 0.9;
+              p.vy = 0;
+              p.settled = true;
+            }
+          }
+          ctx.fillStyle = "#facc15";
+          ctx.strokeStyle = "#ca8a04";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(p.x * W, p.y * H, p.settled ? 5 : 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
         }
       }
       raf = requestAnimationFrame(draw);
@@ -1009,10 +1084,19 @@ export default memo(function M3Scene3D({ shared, micro, onStats, className }: Pr
       }
     >
       {micro && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 [background:radial-gradient(ellipse_at_center,rgba(255,255,255,0)_58%,rgba(226,232,240,0.85)_100%)]"
-        />
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-10 [background:radial-gradient(ellipse_at_center,rgba(255,255,255,0)_58%,rgba(226,232,240,0.85)_100%)]"
+          />
+          {phase !== "reacting" && phase !== "done" && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-4">
+              <span className="rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-xs font-bold text-slate-500 shadow-sm backdrop-blur">
+                Larutan belum dicampurkan
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -12,10 +12,10 @@ import {
   ProblemSection,
 } from "./sections/InquirySections";
 import ExperimentSection from "./sections/ExperimentSection";
-import { M0Apersepsi, M0Missions, M0Welcome } from "./sections/Module0Sections";
 import { M5Collision, M5Concept, M5Equation } from "./sections/Module5Sections";
 import {
   M6Articles,
+  M6Cases,
   M6CER,
   M6Conclusion,
   M6Decision,
@@ -27,12 +27,6 @@ import { M7Closing } from "./sections/Module7Section";
 export function renderSection(sec: SectionDef, readOnly: boolean) {
   const props = { sec, readOnly };
   switch (sec.type) {
-    case "m0welcome":
-      return <M0Welcome {...props} />;
-    case "m0apersepsi":
-      return <M0Apersepsi {...props} />;
-    case "m0missions":
-      return <M0Missions {...props} />;
     case "orientation":
       return <OrientationSection {...props} />;
     case "problem":
@@ -53,6 +47,8 @@ export function renderSection(sec: SectionDef, readOnly: boolean) {
       return <M5Collision {...props} />;
     case "m6intro":
       return <M6Intro {...props} />;
+    case "m6cases":
+      return <M6Cases {...props} />;
     case "m6articles":
       return <M6Articles {...props} />;
     case "m6cer":

@@ -15,7 +15,8 @@ import {
 } from "firebase/database";
 import { db } from "./firebase/client";
 import { P } from "./paths";
-import { buildProgressSkeleton } from "./progress";
+import { getModuleDef } from "./module-defs";
+import { buildProgressSkeleton, overallPercent } from "./progress";
 import { generateClassCode } from "./utils";
 import type {
   ClassInfo,
@@ -23,6 +24,7 @@ import type {
   DiscussionCase,
   ForumComment,
   ForumPost,
+  OrientationMedia,
   StudentProgress,
   TeacherConclusion,
   TeacherGrade,
@@ -128,6 +130,25 @@ export function listenTeacherClasses(
   });
 }
 
+export async function saveOrientationMedia(
+  classId: string,
+  moduleId: number,
+  data: Pick<OrientationMedia, "youtubeUrl" | "caption">
+): Promise<void> {
+  await set(ref(db, P.orientationMedia(classId, moduleId)), {
+    youtubeUrl: data.youtubeUrl.trim(),
+    caption: data.caption.trim(),
+    updatedAt: Date.now(),
+  } satisfies OrientationMedia);
+}
+
+export async function removeOrientationMedia(
+  classId: string,
+  moduleId: number
+): Promise<void> {
+  await remove(ref(db, P.orientationMedia(classId, moduleId)));
+}
+
 /** Student joins a class using a 6-char code (PR-STU-DASH-004). */
 export async function joinClassByCode(
   uid: string,
@@ -190,6 +211,59 @@ export async function resetStudentData(classId: string, uid: string): Promise<vo
     remove(ref(db, P.discussionProgress(classId, uid))),
   ]);
   await set(ref(db, P.progress(classId, uid)), buildProgressSkeleton());
+}
+
+/** Reset one module while preserving every other module's progress and data. */
+export async function resetStudentModuleData(
+  classId: string,
+  uid: string,
+  moduleId: number
+): Promise<StudentProgress> {
+  const def = getModuleDef(moduleId);
+  if (!def) throw new Error("module-not-found");
+
+  const progress = await getProgress(classId, uid);
+  if (!progress) throw new Error("progress-not-found");
+  const current = progress.modules[String(moduleId)];
+  if (!current || current.status === "locked") throw new Error("module-locked");
+
+  const now = Date.now();
+  const resetSections = Object.fromEntries(
+    def.sections.map((section) => [section.id, { status: "locked" as const }])
+  );
+  const nextProgress: StudentProgress = {
+    ...progress,
+    currentModule: moduleId,
+    currentSection: null,
+    courseCompletedAt: null,
+    lastActivityAt: now,
+    lastSavedAt: now,
+    modules: {
+      ...progress.modules,
+      [String(moduleId)]: {
+        status: "unlocked",
+        currentSection: null,
+        completionPercent: 0,
+        sections: resetSections,
+      },
+    },
+  };
+
+  // A reset in the inquiry modules invalidates the old combined LKPD snapshot.
+  // It will be generated again after Modules 1–4 are all completed.
+  if (moduleId >= 1 && moduleId <= 4) nextProgress.lkpdFinalizedAt = null;
+  nextProgress.overallPercent = overallPercent(nextProgress);
+
+  const updates: Record<string, unknown> = {
+    [P.progress(classId, uid)]: nextProgress,
+    [P.moduleResponses(classId, uid, moduleId)]: null,
+    [P.expRuns(classId, uid, moduleId)]: null,
+  };
+  if (moduleId >= 1 && moduleId <= 4) updates[P.lkpd(classId, uid)] = null;
+  if (moduleId === 6) updates[P.discussionProgress(classId, uid)] = null;
+
+  await updatePaths(updates);
+  return nextProgress;
 }
 
 // ---------- discussion / forum ----------

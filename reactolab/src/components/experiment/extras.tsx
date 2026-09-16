@@ -56,18 +56,35 @@ export function MaxwellBoltzmann({
       </p>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={{ top: 5, right: 10, bottom: 5, left: -18 }}>
+          <AreaChart data={rows} margin={{ top: 5, right: 10, bottom: 18, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="E"
               tick={{ fontSize: 10 }}
-              label={{ value: "Energi kinetik →", position: "insideBottomRight", offset: -2, fontSize: 10 }}
+              height={42}
+              label={{
+                value: "Energi kinetik (relatif)",
+                position: "insideBottom",
+                offset: 8,
+                fontSize: 10,
+                fontWeight: 600,
+                fill: "#475569",
+              }}
             />
             <YAxis
               tick={false}
-              label={{ value: "Jumlah partikel", angle: -90, position: "insideLeft", fontSize: 10, offset: 24 }}
+              width={54}
+              label={{
+                value: "Jumlah partikel (relatif)",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fontWeight: 600,
+                fill: "#475569",
+                style: { textAnchor: "middle" },
+              }}
             />
-            <Tooltip />
+            <Tooltip itemSorter={(item) => -Number(item.value ?? 0)} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <ReferenceLine
               x={EA}

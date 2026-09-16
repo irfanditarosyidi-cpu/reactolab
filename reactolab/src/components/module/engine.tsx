@@ -17,6 +17,7 @@ import { get, ref, set, update } from "firebase/database";
 import { db } from "@/lib/firebase/client";
 import { P } from "@/lib/paths";
 import {
+  MODULES,
   getModuleDef,
   sectionIds,
   type ModuleDef,
@@ -24,12 +25,14 @@ import {
 import {
   buildProgressSkeleton,
   moduleCompletionPercent,
+  normalizeProgress,
   overallPercent,
 } from "@/lib/progress";
 import { useAuth } from "@/lib/auth-context";
 import type {
   ExperimentRun,
   ModuleProgress,
+  OrientationMedia,
   SaveState,
   StudentProgress,
 } from "@/lib/types";
@@ -46,6 +49,7 @@ export interface EngineCtx {
   modProgress: ModuleProgress;
   drafts: DraftMap;
   runs: Record<string, ExperimentRun>;
+  orientationMedia: OrientationMedia | null;
   saveState: SaveState;
   readOnlyAcademic: boolean;
   updateDraft: (sectionId: string, patch: Record<string, unknown>) => void;
@@ -56,6 +60,7 @@ export interface EngineCtx {
     finalPatch?: Record<string, unknown>
   ) => Promise<void>;
   recordRun: (run: ExperimentRun) => Promise<void>;
+  resetExperiment: () => Promise<void>;
   saveAndExit: () => Promise<void>;
   goToModule: (id: number) => void;
   exitToDashboard: () => Promise<void>;
@@ -81,6 +86,7 @@ interface LoadedState {
   progress: StudentProgress;
   drafts: DraftMap;
   runs: Record<string, ExperimentRun>;
+  orientationMedia: OrientationMedia | null;
 }
 
 export function ModuleEngineProvider({
@@ -120,19 +126,15 @@ export function ModuleEngineProvider({
 
     (async () => {
       const progressSnap = await get(ref(db, P.progress(classId, uid)));
-      let progress: StudentProgress = progressSnap.exists()
+      const storedProgress: StudentProgress = progressSnap.exists()
         ? (progressSnap.val() as StudentProgress)
         : buildProgressSkeleton();
-      if (!progressSnap.exists()) {
+      let progress = normalizeProgress(storedProgress);
+      if (
+        !progressSnap.exists() ||
+        JSON.stringify(progress) !== JSON.stringify(storedProgress)
+      ) {
         await set(ref(db, P.progress(classId, uid)), progress);
-      }
-      // schema safety: make sure this module node exists
-      if (!progress.modules?.[String(moduleId)]) {
-        const skel = buildProgressSkeleton();
-        progress = {
-          ...progress,
-          modules: { ...skel.modules, ...(progress.modules ?? {}) },
-        };
       }
 
       const mod = progress.modules[String(moduleId)];
@@ -141,9 +143,10 @@ export function ModuleEngineProvider({
         return;
       }
 
-      const [respSnap, runsSnap] = await Promise.all([
+      const [respSnap, runsSnap, orientationMediaSnap] = await Promise.all([
         get(ref(db, P.moduleResponses(classId, uid, moduleId))),
         get(ref(db, P.expRuns(classId, uid, moduleId))),
+        get(ref(db, P.orientationMedia(classId, moduleId))),
       ]);
       const drafts: DraftMap = respSnap.exists()
         ? (respSnap.val() as DraftMap)
@@ -151,6 +154,9 @@ export function ModuleEngineProvider({
       const runs: Record<string, ExperimentRun> = runsSnap.exists()
         ? (runsSnap.val() as Record<string, ExperimentRun>)
         : {};
+      const orientationMedia = orientationMediaSnap.exists()
+        ? (orientationMediaSnap.val() as OrientationMedia)
+        : null;
 
       // opening transitions (unlocked → in_progress, PR-STU-DASH-003)
       const now = Date.now();
@@ -173,7 +179,7 @@ export function ModuleEngineProvider({
       await set(ref(db, P.progress(classId, uid)), p);
 
       if (!cancelled) {
-        setState({ progress: p, drafts, runs });
+        setState({ progress: p, drafts, runs, orientationMedia });
         // Resume scroll: jump to the active section (PR-LEARN-SAVE-003)
         const target = m.currentSection;
         if (target) {
@@ -301,9 +307,12 @@ export function ModuleEngineProvider({
         if (nextMod && nextMod.status === "locked") {
           nextMod.status = "unlocked"; // PR-LEARN-SAVE-004
         }
-        if (moduleId === 7) {
-          p.courseCompletedAt = now; // PR-LEARN-SAVE-005
-        }
+        const courseComplete = MODULES.every(
+          (module) => p.modules[String(module.id)]?.status === "completed"
+        );
+        p.courseCompletedAt = courseComplete
+          ? (p.courseCompletedAt ?? now)
+          : null;
       }
       m.completionPercent = moduleCompletionPercent(m, moduleId);
       p.currentModule = moduleId;
@@ -317,8 +326,12 @@ export function ModuleEngineProvider({
           drafts[sectionId] ?? null,
       };
 
-      // Module 4 last section → finalize LKPD (PRD §21/§22)
-      if (moduleId === 4 && !nextId) {
+      // Finalize/rebuild LKPD whenever a completed inquiry module makes all
+      // Modules 1–4 complete. This also supports resetting just one module.
+      const inquiryModulesComplete = [1, 2, 3, 4].every(
+        (id) => p.modules[String(id)]?.status === "completed"
+      );
+      if (moduleId >= 1 && moduleId <= 4 && !nextId && inquiryModulesComplete) {
         p.lkpdFinalizedAt = now;
         updates[P.progress(classId, uid)] = p;
         const [respAll, expAll] = await Promise.all([
@@ -345,7 +358,12 @@ export function ModuleEngineProvider({
       try {
         await update(ref(db), updates);
         setSaveState("saved");
-        setState({ progress: p, drafts, runs: st.runs });
+        setState({
+          progress: p,
+          drafts,
+          runs: st.runs,
+          orientationMedia: st.orientationMedia,
+        });
         if (nextId) {
           setTimeout(() => {
             document
@@ -380,6 +398,44 @@ export function ModuleEngineProvider({
     },
     [classId, uid, moduleId]
   );
+
+  // ---------- reset all experiment data for the current module ----------
+  const resetExperiment = useCallback(async () => {
+    const st = stateRef.current;
+    if (!st || !classId || !uid) return;
+
+    // Commit pending edits first so no delayed autosave can restore stale data
+    // after the reset has completed.
+    const flushed = await flushNow();
+    if (!flushed) throw new Error("reset-experiment-flush-failed");
+
+    const now = Date.now();
+    const drafts = { ...st.drafts };
+    delete drafts.section4;
+    const progress = clone(st.progress);
+    progress.lastActivityAt = now;
+    progress.lastSavedAt = now;
+
+    setSaveState("saving");
+    try {
+      await update(ref(db), {
+        [P.expRuns(classId, uid, moduleId)]: null,
+        [P.sectionResponse(classId, uid, moduleId, "section4")]: null,
+        [`${P.progress(classId, uid)}/lastActivityAt`]: now,
+        [`${P.progress(classId, uid)}/lastSavedAt`]: now,
+      });
+      setState({
+        progress,
+        drafts,
+        runs: {},
+        orientationMedia: st.orientationMedia,
+      });
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+      throw new Error("reset-experiment-failed");
+    }
+  }, [classId, uid, moduleId, flushNow]);
 
   // ---------- exit actions ----------
   const saveAndExit = useCallback(async () => {
@@ -430,6 +486,7 @@ export function ModuleEngineProvider({
     modProgress,
     drafts: state.drafts,
     runs: state.runs,
+    orientationMedia: state.orientationMedia,
     saveState,
     readOnlyAcademic,
     updateDraft,
@@ -437,6 +494,7 @@ export function ModuleEngineProvider({
     retrySave: () => void flushNow(),
     completeSection,
     recordRun,
+    resetExperiment,
     saveAndExit,
     goToModule,
     exitToDashboard,

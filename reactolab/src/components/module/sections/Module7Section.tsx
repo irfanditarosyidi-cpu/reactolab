@@ -6,12 +6,14 @@ import { useState } from "react";
 import { Download, PartyPopper } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/misc";
+import { useToast } from "@/components/ui/Toast";
 import { MODULES } from "@/lib/module-defs";
 import { downloadLkpdPdf } from "@/lib/lkpd-pdf";
 import { useEngine } from "../engine";
 import type { SectionProps } from "./InquirySections";
 
 export function M7Closing({ sec, readOnly }: SectionProps) {
+  const { toast } = useToast();
   const { progress, classId, uid, studentName, completeSection, exitToDashboard } =
     useEngine();
   const [busy, setBusy] = useState(false);
@@ -54,6 +56,10 @@ export function M7Closing({ sec, readOnly }: SectionProps) {
             setDl(true);
             try {
               await downloadLkpdPdf(classId, uid);
+              toast("LKPD berhasil dibuat dan diunduh.", "success");
+            } catch (error) {
+              console.error("Gagal mengunduh LKPD", error);
+              toast("LKPD gagal dibuat. Silakan coba lagi.", "error");
             } finally {
               setDl(false);
             }

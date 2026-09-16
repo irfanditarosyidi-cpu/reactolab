@@ -5,8 +5,9 @@
 // CER is submitted (also enforced by RTDB security rules).
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, MessageCircle, Send } from "lucide-react";
+import { CheckCircle2, LockKeyhole, MessageCircle, Send } from "lucide-react";
 import Button from "@/components/ui/Button";
+import EmbeddedLink from "@/components/ui/EmbeddedLink";
 import { Help, Label, Textarea } from "@/components/ui/forms";
 import { Badge, Avatar, Spinner } from "@/components/ui/misc";
 import {
@@ -132,14 +133,12 @@ export function M6Articles({ sec, readOnly }: SectionProps) {
           {c.articleNote ? (
             <p className="mt-2 text-sm text-slate-600">{c.articleNote}</p>
           ) : null}
-          <a
-            href={c.articleUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline"
-          >
-            <ExternalLink className="h-4 w-4" /> Buka Artikel
-          </a>
+          <div className="mt-3">
+            <EmbeddedLink
+              url={c.articleUrl}
+              title={`Artikel studi kasus ${i + 1}: ${c.title}`}
+            />
+          </div>
           <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5">
             <p className="text-xs font-bold text-slate-500 uppercase">Pertanyaan Diskusi</p>
             <p className="text-sm font-semibold text-slate-800 mt-1">{c.question}</p>
@@ -467,6 +466,400 @@ function CaseForum({
             <Send className="h-4 w-4" />
           </Button>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Unified case flow: article → CER → forum → decision ----------
+
+interface UnifiedCaseDraft {
+  read?: boolean;
+  claim?: string;
+  evidence?: string;
+  reasoning?: string;
+  decision?: string;
+  decisionSubmittedAt?: number;
+}
+
+interface DiscussionCaseProgress {
+  cerSubmittedAt?: number;
+  lastCommentAt?: number;
+  decisionAt?: number;
+}
+
+export function M6Cases({ sec, readOnly }: SectionProps) {
+  const {
+    classId,
+    uid,
+    studentName,
+    drafts,
+    updateDraft,
+    completeSection,
+  } = useEngine();
+  const cases = useCases();
+  const sectionDraft = drafts[sec.id] ?? {};
+  const legacyRead =
+    ((drafts.section2?.read as Record<string, boolean> | undefined) ?? {});
+  const legacyCer = drafts.section3 ?? {};
+  const legacyCommentCounts =
+    ((drafts.section4?.myComments as Record<string, number> | undefined) ?? {});
+  const legacyDecisions =
+    ((drafts.section5?.decisions as Record<string, string> | undefined) ?? {});
+
+  const [myPosts, setMyPosts] = useState<Record<string, ForumPost | null> | null>(null);
+  const [discussionProgress, setDiscussionProgress] = useState<
+    Record<string, DiscussionCaseProgress>
+  >({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [busyCase, setBusyCase] = useState<string | null>(null);
+  const [busyComplete, setBusyComplete] = useState(false);
+
+  useEffect(() => {
+    if (!cases) return;
+    let alive = true;
+    void (async () => {
+      const [posts, savedProgress] = await Promise.all([
+        Promise.all(
+          cases.map(async (discussionCase) => [
+            discussionCase.id,
+            await readOnce<ForumPost>(P.post(classId, discussionCase.id, uid)),
+          ] as const)
+        ),
+        readOnce<Record<string, DiscussionCaseProgress>>(
+          P.discussionProgress(classId, uid)
+        ),
+      ]);
+      if (!alive) return;
+      setMyPosts(Object.fromEntries(posts));
+      setDiscussionProgress(savedProgress ?? {});
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [cases, classId, uid]);
+
+  useEffect(() => {
+    if (!cases || !myPosts) return;
+    const unsubs = cases
+      .filter((discussionCase) => Boolean(myPosts[discussionCase.id]))
+      .map((discussionCase) =>
+        listenComments(classId, discussionCase.id, (comments) => {
+          setCommentCounts((current) => ({
+            ...current,
+            [discussionCase.id]: comments.filter(
+              (comment) => comment.authorId === uid
+            ).length,
+          }));
+        })
+      );
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }, [cases, classId, uid, myPosts]);
+
+  if (cases === null || myPosts === null) return <Spinner label="Memuat studi kasus…" />;
+  if (cases.length === 0)
+    return <WaitingTeacher text="Guru belum mempublikasikan studi kasus diskusi." />;
+
+  const getCaseDraft = (discussionCase: CaseItem): UnifiedCaseDraft => {
+    const current =
+      (sectionDraft[discussionCase.id] as UnifiedCaseDraft | undefined) ?? {};
+    const oldCer =
+      (legacyCer[discussionCase.id] as Record<string, string> | undefined) ?? {};
+    return {
+      ...current,
+      read:
+        current.read ??
+        legacyRead[discussionCase.id] ??
+        Boolean(myPosts[discussionCase.id]),
+      claim: current.claim ?? oldCer.claim ?? myPosts[discussionCase.id]?.claim ?? "",
+      evidence:
+        current.evidence ?? oldCer.evidence ?? myPosts[discussionCase.id]?.evidence ?? "",
+      reasoning:
+        current.reasoning ?? oldCer.reasoning ?? myPosts[discussionCase.id]?.reasoning ?? "",
+      decision: current.decision ?? legacyDecisions[discussionCase.id] ?? "",
+    };
+  };
+
+  const patchCase = (
+    discussionCase: CaseItem,
+    patch: Partial<UnifiedCaseDraft>
+  ) => {
+    updateDraft(sec.id, {
+      [discussionCase.id]: { ...getCaseDraft(discussionCase), ...patch },
+    });
+  };
+
+  const sendCer = async (discussionCase: CaseItem) => {
+    const value = getCaseDraft(discussionCase);
+    const post: ForumPost = {
+      claim: (value.claim ?? "").trim(),
+      evidence: (value.evidence ?? "").trim(),
+      reasoning: (value.reasoning ?? "").trim(),
+      studentName,
+      submittedAt: Date.now(),
+    };
+    setBusyCase(`cer-${discussionCase.id}`);
+    try {
+      await submitCER(classId, discussionCase.id, uid, post);
+      setMyPosts((current) => ({ ...(current ?? {}), [discussionCase.id]: post }));
+    } finally {
+      setBusyCase(null);
+    }
+  };
+
+  const submitDecision = async (discussionCase: CaseItem) => {
+    const value = getCaseDraft(discussionCase);
+    const submittedAt = Date.now();
+    const nextDraft: UnifiedCaseDraft = {
+      ...value,
+      decision: (value.decision ?? "").trim(),
+      decisionSubmittedAt: submittedAt,
+    };
+    setBusyCase(`decision-${discussionCase.id}`);
+    try {
+      patchCase(discussionCase, nextDraft);
+      await updatePaths({
+        [`${P.sectionResponse(classId, uid, 6, sec.id)}/${discussionCase.id}`]:
+          nextDraft,
+        [`${P.discussionProgress(classId, uid)}/${discussionCase.id}/decisionAt`]:
+          submittedAt,
+      });
+      setDiscussionProgress((current) => ({
+        ...current,
+        [discussionCase.id]: {
+          ...(current[discussionCase.id] ?? {}),
+          decisionAt: submittedAt,
+        },
+      }));
+    } finally {
+      setBusyCase(null);
+    }
+  };
+
+  const caseCompleted = (discussionCase: CaseItem) =>
+    Boolean(
+      discussionProgress[discussionCase.id]?.decisionAt ||
+        getCaseDraft(discussionCase).decisionSubmittedAt
+    );
+  const allCompleted = cases.every(caseCompleted);
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm leading-relaxed text-brand-900">
+        Kerjakan setiap kasus secara terpisah dan berurutan. Dalam satu kasus kamu
+        akan membaca artikel, menyusun CER, menanggapi forum, lalu mengambil keputusan.
+        Kasus berikutnya terbuka setelah keputusan kasus sebelumnya disimpan.
+      </div>
+
+      {cases.map((discussionCase, index) => {
+        const previousCompleted =
+          index === 0 || caseCompleted(cases[index - 1]);
+        const complete = caseCompleted(discussionCase);
+        const unlocked = previousCompleted || complete;
+        const value = getCaseDraft(discussionCase);
+        const post = myPosts[discussionCase.id];
+        const commentCount =
+          commentCounts[discussionCase.id] ??
+          legacyCommentCounts[discussionCase.id] ??
+          0;
+        const cerValid = CER_FIELDS.every(
+          (field) => (value[field.key] ?? "").trim().length >= 10
+        );
+        // A newly published case remains actionable even when the old module was
+        // already completed; finished cases stay immutable.
+        const caseReadOnly = readOnly && complete;
+
+        return (
+          <article
+            key={discussionCase.id}
+            className={`overflow-hidden rounded-2xl border-2 ${
+              complete
+                ? "border-emerald-300 bg-emerald-50/20"
+                : unlocked
+                  ? "border-brand-300 bg-white"
+                  : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <header
+              className={`flex flex-wrap items-center gap-3 px-5 py-4 ${
+                complete
+                  ? "bg-emerald-600 text-white"
+                  : unlocked
+                    ? "bg-brand-600 text-white"
+                    : "bg-slate-200 text-slate-500"
+              }`}
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-white/20 text-sm font-black">
+                {complete ? <CheckCircle2 className="h-5 w-5" /> : index + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-wider opacity-80">
+                  Kasus {index + 1}
+                </p>
+                <h3 className="font-black leading-snug">{discussionCase.title}</h3>
+              </div>
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold">
+                {complete ? "Selesai" : unlocked ? "Sedang dikerjakan" : "Terkunci"}
+              </span>
+            </header>
+
+            {!unlocked ? (
+              <div className="flex items-center gap-2 px-5 py-5 text-sm font-semibold text-slate-500">
+                <LockKeyhole className="h-4 w-4" /> Selesaikan decision making Kasus {index}
+                terlebih dahulu.
+              </div>
+            ) : (
+              <div className="space-y-5 p-4 sm:p-5">
+                <section className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-100 text-xs font-black text-brand-700">1</span>
+                    <h4 className="text-sm font-black text-slate-800">Baca Artikel & Pertanyaan</h4>
+                  </div>
+                  {discussionCase.articleNote && (
+                    <p className="mb-3 text-sm text-slate-600">{discussionCase.articleNote}</p>
+                  )}
+                  <EmbeddedLink
+                    url={discussionCase.articleUrl}
+                    title={`Artikel Kasus ${index + 1}: ${discussionCase.title}`}
+                  />
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Pertanyaan Diskusi</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{discussionCase.question}</p>
+                  </div>
+                  <label className="mt-3 flex items-start gap-2 text-sm font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(value.read)}
+                      disabled={caseReadOnly || Boolean(post)}
+                      onChange={(event) => patchCase(discussionCase, { read: event.target.checked })}
+                      className="mt-0.5 h-4 w-4 accent-brand-600"
+                    />
+                    Saya sudah membaca artikel dan memahami pertanyaannya
+                  </label>
+                </section>
+
+                {value.read && (
+                  <section className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-100 text-xs font-black text-brand-700">2</span>
+                      <h4 className="text-sm font-black text-slate-800">Susun Pendapat CER</h4>
+                    </div>
+                    {post ? (
+                      <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                        <p className="font-bold text-emerald-800">✓ CER sudah dikirim</p>
+                        <p><b>Claim:</b> {post.claim}</p>
+                        <p><b>Evidence:</b> {post.evidence}</p>
+                        <p><b>Reasoning:</b> {post.reasoning}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {CER_FIELDS.map((field) => (
+                          <div key={field.key}>
+                            <Label>{field.label}</Label>
+                            <Textarea
+                              rows={2}
+                              disabled={caseReadOnly}
+                              value={value[field.key] ?? ""}
+                              onChange={(event) =>
+                                patchCase(discussionCase, { [field.key]: event.target.value })
+                              }
+                              placeholder={field.ph}
+                            />
+                          </div>
+                        ))}
+                        {!caseReadOnly && (
+                          <Button
+                            size="sm"
+                            disabled={!cerValid}
+                            loading={busyCase === `cer-${discussionCase.id}`}
+                            onClick={() => void sendCer(discussionCase)}
+                          >
+                            <Send className="h-4 w-4" /> Kirim CER
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {post && (
+                  <section className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-100 text-xs font-black text-brand-700">3</span>
+                        <h4 className="text-sm font-black text-slate-800">Tanggapi Forum</h4>
+                      </div>
+                      <Badge tone={commentCount >= 1 ? "green" : "amber"}>
+                        {commentCount >= 1 ? "Syarat terpenuhi" : "Minimal 1 tanggapan"}
+                      </Badge>
+                    </div>
+                    <CaseForum
+                      c={discussionCase}
+                      index={index}
+                      readOnly={caseReadOnly}
+                      onMyComments={(caseId, count) =>
+                        setCommentCounts((current) => ({ ...current, [caseId]: count }))
+                      }
+                    />
+                  </section>
+                )}
+
+                {post && commentCount >= 1 && (
+                  <section className="rounded-xl border border-slate-200 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-100 text-xs font-black text-brand-700">4</span>
+                      <h4 className="text-sm font-black text-slate-800">Decision Making</h4>
+                    </div>
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+                      {discussionCase.decisionPrompt}
+                    </p>
+                    <Textarea
+                      className="mt-3"
+                      rows={3}
+                      disabled={complete}
+                      value={value.decision ?? ""}
+                      onChange={(event) =>
+                        patchCase(discussionCase, { decision: event.target.value })
+                      }
+                      placeholder="Keputusan saya beserta pertimbangan ilmiahnya…"
+                    />
+                    {complete ? (
+                      <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
+                        ✓ Kasus {index + 1} selesai. Keputusanmu sudah tersimpan.
+                      </p>
+                    ) : (
+                      <Button
+                        className="mt-3"
+                        disabled={(value.decision ?? "").trim().length < 15}
+                        loading={busyCase === `decision-${discussionCase.id}`}
+                        onClick={() => void submitDecision(discussionCase)}
+                      >
+                        Simpan Keputusan &amp; Selesaikan Kasus {index + 1}
+                      </Button>
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+          </article>
+        );
+      })}
+
+      {!readOnly && (
+        <Button
+          disabled={!allCompleted}
+          loading={busyComplete}
+          onClick={async () => {
+            setBusyComplete(true);
+            try {
+              await completeSection(sec.id);
+            } finally {
+              setBusyComplete(false);
+            }
+          }}
+        >
+          Lanjut ke Kesimpulan Guru
+        </Button>
       )}
     </div>
   );

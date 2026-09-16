@@ -56,17 +56,34 @@ export default function M3MaxwellPanel({
       </div>
       <div className="mt-1 h-52 sm:h-56">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={{ top: 20, right: 8, bottom: 4, left: -22 }}>
+          <AreaChart data={rows} margin={{ top: 20, right: 8, bottom: 18, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="E"
               tick={{ fontSize: 10 }}
               tickCount={6}
-              label={{ value: "Energi kinetik →", position: "insideBottomRight", offset: -2, fontSize: 10 }}
+              height={42}
+              label={{
+                value: "Energi kinetik (relatif)",
+                position: "insideBottom",
+                offset: 8,
+                fontSize: 10,
+                fontWeight: 600,
+                fill: "#475569",
+              }}
             />
             <YAxis
               tick={false}
-              label={{ value: "Jumlah partikel", angle: -90, position: "insideLeft", fontSize: 10, offset: 28 }}
+              width={54}
+              label={{
+                value: "Jumlah partikel (relatif)",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fontWeight: 600,
+                fill: "#475569",
+                style: { textAnchor: "middle" },
+              }}
             />
             <ReferenceLine
               x={M3_EA}

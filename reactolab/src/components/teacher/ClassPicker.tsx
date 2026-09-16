@@ -21,7 +21,7 @@ export default function ClassPicker({
 }: {
   title: string;
   subtitle: string;
-  targetSub: "monitoring" | "discussion";
+  targetSub: "monitoring" | "discussion" | "practice";
 }) {
   const { user } = useAuth();
   const router = useRouter();

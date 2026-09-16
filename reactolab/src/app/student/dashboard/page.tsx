@@ -3,7 +3,7 @@
 // Student Dashboard (PRD §13) — identity, global progress, join class,
 // module grid, and the Mulai/Lanjutkan primary CTA (resume, PR-LEARN-SAVE-003).
 
-import Link from "next/link";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Download, School, Trophy } from "lucide-react";
@@ -12,7 +12,7 @@ import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Input, Label } from "@/components/ui/forms";
 import { Avatar, ProgressBar, Spinner, Badge } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
-import ModuleGrid from "@/components/student/ModuleGrid";
+import LearningMissionMap from "@/components/student/LearningMissionMap";
 import { useAuth } from "@/lib/auth-context";
 import { joinClassByCode, listen, listenMyGrades, readOnce } from "@/lib/db";
 import { downloadLkpdPdf } from "@/lib/lkpd-pdf";
@@ -167,6 +167,10 @@ export default function StudentDashboard() {
                 setDl(true);
                 try {
                   await downloadLkpdPdf(classId, user.uid);
+                  toast("LKPD berhasil dibuat dan diunduh.", "success");
+                } catch (error) {
+                  console.error("Gagal mengunduh LKPD", error);
+                  toast("LKPD gagal dibuat. Silakan coba lagi.", "error");
                 } finally {
                   setDl(false);
                 }
@@ -178,17 +182,8 @@ export default function StudentDashboard() {
         </Card>
       )}
 
-      {/* modules */}
+      {/* modules / mission map */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-black text-slate-900 text-lg">Modul Pembelajaran</h2>
-          <Link
-            href="/student/modules"
-            className="text-sm font-semibold text-brand-600 hover:underline"
-          >
-            Lihat semua →
-          </Link>
-        </div>
         {!classId ? (
           <Card>
             <CardBody className="text-center py-10">
@@ -204,9 +199,13 @@ export default function StudentDashboard() {
         ) : !progressLoaded ? (
           <Spinner label="Memuat progres…" />
         ) : (
-          <ModuleGrid progress={progress} grades={grades} />
+          <LearningMissionMap
+            progress={progress}
+            uid={user?.uid ?? ""}
+          />
         )}
       </div>
+
     </div>
   );
 }

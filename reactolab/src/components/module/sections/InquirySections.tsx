@@ -8,13 +8,13 @@ import Button from "@/components/ui/Button";
 import { Help, Input, Label, Select, Textarea } from "@/components/ui/forms";
 import { useEngine } from "../engine";
 import { sortRuns } from "@/lib/runs";
+import { getYouTubeEmbedUrl } from "@/lib/youtube";
 import type { ModuleDef, SectionDef } from "@/lib/module-defs";
 import type {
   ConclusionDraft,
   ExperimentRun,
   HypoTestDraft,
   HypothesisDraft,
-  OrientationDraft,
   ProblemDraft,
 } from "@/lib/types";
 
@@ -69,43 +69,55 @@ function CompleteBar({
 // ---------- Section 1: Orientasi ----------
 
 export function OrientationSection({ sec, readOnly }: SectionProps) {
-  const { def, drafts, updateDraft, completeSection } = useEngine();
-  const d = (drafts[sec.id] ?? {}) as OrientationDraft;
+  const { def, moduleId, orientationMedia, completeSection } = useEngine();
   const o = def.orientation!;
-  const valid = (d.observation ?? "").trim().length >= 10;
+  const embedUrl = orientationMedia
+    ? getYouTubeEmbedUrl(orientationMedia.youtubeUrl)
+    : null;
 
   return (
     <div>
-      <div className="rounded-xl bg-brand-50 border border-brand-100 p-4">
-        <div className="flex items-start gap-3">
-          <span className="h-9 w-9 rounded-xl bg-white text-brand-600 border border-brand-200 flex items-center justify-center shrink-0">
-            <FlaskConical className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
-          </span>
-          <div>
-            <p className="text-sm text-slate-700 leading-relaxed">{o.story}</p>
-            <p className="mt-2 text-xs font-semibold text-brand-700 italic">
-              {o.caption}
-            </p>
+      {embedUrl ? (
+        <figure className="relative isolate rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative aspect-video rounded-2xl bg-slate-950">
+            <iframe
+              src={embedUrl}
+              title={`Video orientasi Modul ${moduleId}: ${def.title}`}
+              className="pointer-events-auto absolute inset-0 z-10 block h-full w-full touch-manipulation rounded-2xl border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              allowFullScreen
+            />
+          </div>
+        </figure>
+      ) : (
+        <div className="rounded-xl bg-brand-50 border border-brand-100 p-4">
+          <div className="flex items-start gap-3">
+            <span className="h-9 w-9 rounded-xl bg-white text-brand-600 border border-brand-200 flex items-center justify-center shrink-0">
+              <FlaskConical className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
+            </span>
+            <div>
+              <p className="text-sm text-slate-700 leading-relaxed">{o.story}</p>
+              <p className="mt-2 text-xs font-semibold text-brand-700 italic">
+                {o.caption}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="mt-4">
-        <Label>{o.question}</Label>
-        <Textarea
-          value={d.observation ?? ""}
-          disabled={readOnly}
-          onChange={(e) => updateDraft(sec.id, { observation: e.target.value })}
-          placeholder="Tuliskan hasil pengamatanmu terhadap fenomena di atas…"
-        />
-        <Help>Minimal satu kalimat pengamatan (≥ 10 karakter).</Help>
-      </div>
+      {embedUrl && orientationMedia?.caption.trim() ? (
+        <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 sm:px-5">
+          <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-slate-700">
+            {orientationMedia.caption.trim()}
+          </p>
+        </div>
+      ) : null}
 
       {!readOnly && (
         <CompleteBar
-          valid={valid}
+          valid
           onComplete={() => completeSection(sec.id)}
-          hint="Isi pengamatanmu terlebih dahulu."
+          label="Lanjutkan"
         />
       )}
     </div>
@@ -133,7 +145,6 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
             value={d.varBebas ?? ""}
             disabled={readOnly}
             onChange={(e) => updateDraft(sec.id, { varBebas: e.target.value })}
-            placeholder={def.problem?.hintBebas}
           />
           <span>terhadap</span>
           <Input
@@ -141,7 +152,6 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
             value={d.varTerikat ?? ""}
             disabled={readOnly}
             onChange={(e) => updateDraft(sec.id, { varTerikat: e.target.value })}
-            placeholder={def.problem?.hintTerikat}
           />
           <span>?</span>
         </div>

@@ -44,6 +44,12 @@ export interface StudentProgress {
   modules: Record<string, ModuleProgress>;
 }
 
+export interface OrientationMedia {
+  youtubeUrl: string;
+  caption: string;
+  updatedAt: number;
+}
+
 export interface ClassInfo {
   classId?: string;
   className: string;
@@ -51,6 +57,7 @@ export interface ClassInfo {
   teacherId: string;
   status: "active" | "archived";
   createdAt: number;
+  orientationMedia?: Record<string, OrientationMedia>;
 }
 
 export interface ClassMembership {
@@ -114,6 +121,24 @@ export interface TeacherGrade {
   note?: string;       // catatan guru (opsional)
   gradedAt: number;    // timestamp pertama kali dinilai
   updatedAt?: number;  // timestamp update terakhir
+}
+
+export type PracticeMode = "default" | "custom";
+
+export interface PracticeQuestion {
+  id?: string;
+  q: string;
+  options: string[];
+  answer: number;
+  explain: string;
+}
+
+/** Per-class teacher settings for the standalone student practice page. */
+export interface PracticeConfig {
+  enabled: boolean;
+  mode: PracticeMode;
+  questions: PracticeQuestion[];
+  updatedAt: number;
 }
 
 export interface PasswordResetRequest {

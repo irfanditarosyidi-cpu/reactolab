@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
+import EmbeddedLink from "@/components/ui/EmbeddedLink";
 import { Help, Input, Label, Textarea } from "@/components/ui/forms";
 import Modal from "@/components/ui/Modal";
 import { Avatar, Badge, EmptyState, Spinner } from "@/components/ui/misc";
@@ -27,6 +28,7 @@ import { useToast } from "@/components/ui/Toast";
 import { db } from "@/lib/firebase/client";
 import { listen, listenAllCases, listenComments, listenPosts } from "@/lib/db";
 import { P } from "@/lib/paths";
+import { getEmbedUrl, normalizeHttpUrl } from "@/lib/embed";
 import { formatRelative } from "@/lib/utils";
 import type {
   DiscussionCase,
@@ -142,18 +144,24 @@ export default function TeacherDiscussionPage() {
   };
 
   const saveCase = async () => {
+    const normalizedArticleUrl = normalizeHttpUrl(form.articleUrl);
+    if (!normalizedArticleUrl) {
+      toast("Link artikel tidak valid.", "error");
+      return;
+    }
     setBusy(true);
     try {
+      const normalizedForm = { ...form, articleUrl: normalizedArticleUrl };
       if (editing) {
         await update(ref(db, P.caseItem(classId, editing.id)), {
-          ...form,
+          ...normalizedForm,
           updatedAt: Date.now(),
         });
         toast("Kasus diperbarui.", "success");
       } else {
         const r = push(ref(db, P.cases(classId)));
         await set(r, {
-          ...form,
+          ...normalizedForm,
           published: false,
           order: (cases?.length ?? 0) + 1,
           createdAt: Date.now(),
@@ -209,7 +217,7 @@ export default function TeacherDiscussionPage() {
 
   const formValid =
     form.title.trim().length >= 3 &&
-    /^https?:\/\/\S+$/.test(form.articleUrl.trim()) &&
+    Boolean(getEmbedUrl(form.articleUrl)) &&
     form.question.trim().length >= 10 &&
     form.decisionPrompt.trim().length >= 10;
 
@@ -381,6 +389,15 @@ export default function TeacherDiscussionPage() {
               placeholder="https://…"
             />
             <Help>Gunakan artikel berita/sains yang relevan dengan laju reaksi.</Help>
+            {getEmbedUrl(form.articleUrl) && (
+              <div className="mt-2">
+                <EmbeddedLink
+                  url={form.articleUrl}
+                  title="Pratinjau link artikel"
+                  className="h-56 sm:h-64"
+                />
+              </div>
+            )}
           </div>
           <div>
             <Label>Catatan Pengantar (opsional)</Label>

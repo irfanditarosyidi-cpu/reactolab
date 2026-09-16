@@ -5,7 +5,14 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Copy, MessagesSquare, MonitorCheck, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  Copy,
+  MessagesSquare,
+  MonitorCheck,
+  RefreshCw,
+} from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
@@ -111,6 +118,11 @@ export default function ClassDetailPage() {
           <Link href={`/teacher/classes/${classId}/discussion`} className="flex-1">
             <Button variant="secondary" full>
               <MessagesSquare className="h-4 w-4" /> Forum Diskusi
+            </Button>
+          </Link>
+          <Link href={`/teacher/classes/${classId}/practice`} className="flex-1">
+            <Button variant="secondary" full>
+              <ClipboardList className="h-4 w-4" /> Latihan Soal
             </Button>
           </Link>
         </div>

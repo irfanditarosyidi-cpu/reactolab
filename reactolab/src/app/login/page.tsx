@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import AuthShell from "@/components/layout/AuthShell";
 import Button from "@/components/ui/Button";
 import { FieldError, Input, Label, PasswordInput } from "@/components/ui/forms";
@@ -79,6 +80,12 @@ export default function LoginPage() {
         <Button type="submit" full loading={busy}>
           Masuk
         </Button>
+        <Link
+          href="/"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700"
+        >
+          <ArrowLeft className="h-4 w-4" /> Kembali ke Beranda
+        </Link>
         <div className="flex items-center justify-between text-sm pt-1">
           <Link href="/forgot-password" className="text-brand-600 hover:underline">
             Lupa password?

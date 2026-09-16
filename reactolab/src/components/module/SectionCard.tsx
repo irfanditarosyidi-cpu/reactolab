@@ -12,15 +12,17 @@ export default function SectionCard({
   index,
   title,
   status,
+  defaultOpen = false,
   children,
 }: {
   id: string;
   index: number;
   title: string;
   status: "locked" | "active" | "completed";
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [reopened, setReopened] = useState(false);
+  const [reopened, setReopened] = useState(defaultOpen);
 
   return (
     <section

@@ -71,7 +71,7 @@ export default function TeacherDashboard() {
               where:
                 p.currentSection && p.currentModule !== undefined
                   ? `Modul ${p.currentModule} · ${p.currentSection.replace("section", "Bagian ")}`
-                  : `Modul ${p.currentModule ?? 0}`,
+                  : `Modul ${p.currentModule ?? 1}`,
               percent: p.overallPercent ?? 0,
             });
           }

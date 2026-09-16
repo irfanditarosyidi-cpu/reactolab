@@ -6,9 +6,11 @@
 // with strict internal micro-step order.
 
 import { useState } from "react";
-import { Beaker, Check, Lock } from "lucide-react";
+import { Beaker, Check, Lock, RotateCcw, TriangleAlert } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { Help } from "@/components/ui/forms";
+import Modal from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import SimStage from "@/components/experiment/SimStage";
 import M1ExperimentSetup from "@/components/experiment/m1/M1ExperimentSetup";
@@ -80,10 +82,24 @@ function SubStep({
 }
 
 export default function ExperimentSection({ sec, readOnly }: SectionProps) {
-  const { moduleId, def, drafts, runs, updateDraft, completeSection, recordRun } = useEngine();
+  const {
+    moduleId,
+    def,
+    drafts,
+    runs,
+    updateDraft,
+    completeSection,
+    recordRun,
+    resetExperiment,
+  } = useEngine();
+  const { toast } = useToast();
   const cfg = def.experiment!;
   const d = (drafts[sec.id] ?? {}) as ExperimentDraft;
   const [busy, setBusy] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const hasExperimentData =
+    Object.keys(d).length > 0 || Object.keys(runs).length > 0;
 
   // Module 1 stores student-defined concentrations (validated against the
   // allowed range); other modules keep preset option values.
@@ -96,11 +112,15 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
     return cfg.options.some((option) => option.value === value);
   });
   const setupLocked = Boolean(d.setupLocked);
+  const requiredRunValues =
+    moduleId === 4 ? cfg.options.map((option) => option.value) : selected;
   const doneRuns = orderedRuns(cfg, runs);
   const allRunsDone =
     setupLocked &&
-    selected.length >= cfg.minSelections &&
-    selected.every((v) => Boolean(runs[v.replace(/[.#$/[\]]/g, "_")]));
+    requiredRunValues.length >= cfg.minSelections &&
+    requiredRunValues.every((v) =>
+      Boolean(runs[v.replace(/[.#$/[\]]/g, "_")]),
+    );
   const symbolicOk = Boolean(d.symbolicOk);
   const explain = d.explain ?? {};
   const explainOk = explainComplete(explain);
@@ -116,15 +136,116 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
   const stepState = (open: boolean, done: boolean): "locked" | "open" | "done" =>
     done ? "done" : open ? "open" : "locked";
 
+  const handleReset = async () => {
+    setResetBusy(true);
+    try {
+      await resetExperiment();
+      setResetOpen(false);
+      toast(`Simulasi Modul ${moduleId} berhasil direset.`, "success");
+    } catch {
+      toast("Simulasi gagal direset. Silakan coba lagi.", "error");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-2.5 rounded-xl border border-brand-100 bg-brand-50 px-3 py-3 sm:px-4">
         <Beaker className="h-4.5 w-4.5 text-brand-600 shrink-0 mt-0.5" style={{ width: 18, height: 18 }} />
         <p className="text-sm text-brand-900">
-          <b>{cfg.title}.</b> Kerjakan langkah A–E secara berurutan. Semua analisis
-          (partikel, tabel, grafik, simbolik) ada di halaman ini juga.
+          {moduleId === 1 ? (
+            <strong>
+              Untuk membuktikan hipotesis yang telah Anda susun, mari lakukan
+              percobaan menggunakan pita magnesium (Mg) dan larutan asam klorida
+              (HCl).
+            </strong>
+          ) : moduleId === 2 ? (
+            <strong>
+              Untuk membuktikan hipotesis yang telah Anda susun, mari lakukan
+              percobaan reaksi antara batu kapur (CaCO₃) dalam bentuk serbuk,
+              butiran, kepingan, dan bongkahan dengan larutan HCl.
+            </strong>
+          ) : moduleId === 3 ? (
+            <strong>
+              Untuk membuktikan hipotesis yang telah Anda susun, mari lakukan
+              percobaan reaksi antara larutan Na₂S₂O₃ dan HCl dengan mengamati
+              waktu hingga tanda X di bawah wadah tidak lagi terlihat.
+            </strong>
+          ) : moduleId === 4 ? (
+            <strong>
+              Untuk membuktikan hipotesis yang telah Anda susun, mari lakukan
+              percobaan penguraian H₂O₂ dengan menggunakan beberapa jenis katalis
+              untuk membandingkan pengaruhnya terhadap laju reaksi.
+            </strong>
+          ) : (
+            <>
+              <b>{cfg.title}.</b> Kerjakan langkah A–E secara berurutan. Semua
+              analisis (partikel, tabel, grafik, simbolik) ada di halaman ini juga.
+            </>
+          )}
         </p>
       </div>
+
+      {!readOnly && (
+        <div className="flex flex-col gap-2 rounded-xl border border-red-100 bg-red-50/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-slate-600">
+            Mulai ulang akan menghapus pilihan, seluruh data percobaan, grafik, dan
+            jawaban pada bagian eksperimen modul ini.
+          </p>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={resetBusy}
+            disabled={!hasExperimentData}
+            className="min-h-10 shrink-0"
+            onClick={() => setResetOpen(true)}
+          >
+            <RotateCcw className="h-4 w-4" /> Reset Simulasi
+          </Button>
+        </div>
+      )}
+
+      <Modal
+        open={resetOpen}
+        onClose={() => {
+          if (!resetBusy) setResetOpen(false);
+        }}
+        title="Konfirmasi Reset Simulasi"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={resetBusy}
+              onClick={() => setResetOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              loading={resetBusy}
+              onClick={() => void handleReset()}
+            >
+              Ya, Reset Simulasi
+            </Button>
+          </>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
+            <TriangleAlert className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-800">
+              Reset seluruh data simulasi Modul {moduleId}?
+            </p>
+            <p className="text-sm leading-relaxed text-slate-600">
+              Pilihan kondisi, data percobaan, grafik, dan jawaban pada bagian
+              eksperimen akan dihapus. Tindakan ini tidak dapat dibatalkan.
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       {/* A. Setup */}
       <SubStep
@@ -136,6 +257,8 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
               ? `Persiapan — pilih minimal ${cfg.minSelections} bentuk zat padat`
             : moduleId === 3
               ? `Persiapan — tentukan minimal ${cfg.minSelections} suhu`
+            : moduleId === 4
+              ? "Persiapan — empat kondisi pembanding"
             : `Setup Eksperimen — pilih minimal ${cfg.minSelections} ${cfg.paramName.toLowerCase()}`
         }
         state={stepState(true, setupLocked)}
@@ -173,7 +296,10 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             }}
           />
         ) : moduleId === 4 ? (
-          <M4ExperimentSetup options={cfg.options} selected={selected} locked={setupLocked} readOnly={readOnly} onToggle={toggleOption} />
+          <M4ExperimentSetup
+            options={cfg.options}
+            locked={setupLocked}
+          />
         ) : (
           <div className="flex flex-wrap gap-2">
             {cfg.options.map((o) => {
@@ -201,20 +327,27 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <Button
               size="sm"
-              disabled={selected.length < cfg.minSelections}
-              onClick={() => updateDraft(sec.id, { setupLocked: true })}
+              disabled={requiredRunValues.length < cfg.minSelections}
+              onClick={() =>
+                updateDraft(sec.id, {
+                  selected: requiredRunValues,
+                  setupLocked: true,
+                })
+              }
               className="min-h-11 w-full sm:w-auto"
             >
               Kunci Pilihan &amp; Siapkan Alat
             </Button>
             <span className="text-xs text-slate-400">
-              {selected.length}/{cfg.minSelections} minimal dipilih
+              {moduleId === 4
+                ? `${requiredRunValues.length} kondisi akan disiapkan`
+                : `${requiredRunValues.length}/${cfg.minSelections} minimal dipilih`}
             </span>
           </div>
         )}
         {setupLocked && (
           <p className="text-xs text-emerald-700 font-semibold">
-            ✔ Setup terkunci: {selected.length} kondisi siap diuji.
+            ✔ Setup terkunci: {requiredRunValues.length} kondisi siap diuji.
           </p>
         )}
       </SubStep>
@@ -266,7 +399,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             onTutorialSeen={() => updateDraft(sec.id, { m3TutorialSeen: true })}
           />
         ) : moduleId === 4 ? (
-          <M4SimStage cfg={cfg} selected={selected} runs={runs} readOnly={readOnly} onRunDone={(run) => void recordRun(run)} />
+          <M4SimStage cfg={cfg} selected={requiredRunValues} runs={runs} readOnly={readOnly} onRunDone={(run) => void recordRun(run)} />
         ) : (
           <SimStage
             cfg={cfg}

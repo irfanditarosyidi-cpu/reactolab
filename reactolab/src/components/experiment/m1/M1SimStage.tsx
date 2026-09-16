@@ -291,9 +291,9 @@ export default function M1SimStage({
               setTutorialOpen(true);
             }}
             aria-label="Lihat tutorial"
-            className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/90 text-brand-700 shadow-sm backdrop-blur hover:bg-white"
+            className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-white/90 text-brand-700 shadow-sm backdrop-blur hover:bg-white sm:right-3 sm:top-3 sm:h-11 sm:w-11"
           >
-            <CircleHelp className="h-5 w-5" />
+            <CircleHelp className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
 
           {/* collision stats (micro only, bottom-left) */}
@@ -329,13 +329,17 @@ export default function M1SimStage({
             onClick={toggleMicro}
             aria-pressed={micro}
             className={cn(
-              "absolute bottom-3 right-3 inline-flex h-12 items-center gap-2 rounded-full px-4 text-sm font-black shadow-lg transition-colors",
+              "absolute bottom-2 right-2 inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-xs font-black shadow-lg transition-colors sm:bottom-3 sm:right-3 sm:h-12 sm:gap-2 sm:px-4 sm:text-sm",
               micro
                 ? "bg-slate-900 text-white hover:bg-slate-800"
                 : "bg-brand-600 text-white hover:bg-brand-700"
             )}
           >
-            {micro ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+            {micro ? (
+              <ZoomOut className="h-4 w-4 sm:h-5 sm:w-5" />
+            ) : (
+              <ZoomIn className="h-4 w-4 sm:h-5 sm:w-5" />
+            )}
             {micro ? "Kembali" : "Perbesar"}
           </button>
 

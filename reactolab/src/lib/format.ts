@@ -1,7 +1,11 @@
 // Turn stored responses/runs into labeled Q&A pairs — reused by the teacher
 // read-only detail view and the LKPD PDF generator.
 
-import { MODULES, type ModuleDef } from "./module-defs";
+import {
+  MODULES,
+  type ExperimentConfig,
+  type ModuleDef,
+} from "./module-defs";
 import { sortRuns } from "./runs";
 import type { ExperimentRun } from "./types";
 
@@ -13,10 +17,12 @@ export interface QA {
 export interface ModuleReport {
   moduleId: number;
   title: string;
+  description: string;
   items: QA[];
   runs: ExperimentRun[];
   rateUnit?: string;
   paramName?: string;
+  experiment?: ExperimentConfig;
 }
 
 type AnyMap = Record<string, unknown>;
@@ -57,7 +63,12 @@ export function buildModuleReport(
   const s = (id: string) => (resp[id] as AnyMap | undefined) ?? {};
 
   if (def.id >= 1 && def.id <= 4) {
-    items.push({ label: "Pengamatan Awal (Orientasi)", value: str(s("section1").observation) });
+    items.push({
+      label: "Fenomena Awal (Orientasi)",
+      value: [def.orientation?.story, def.orientation?.caption]
+        .filter(Boolean)
+        .join(" "),
+    });
     items.push({
       label: "Rumusan Masalah",
       value:
@@ -89,8 +100,6 @@ export function buildModuleReport(
             : "-",
     });
     items.push({ label: "Kesimpulan", value: str(s("section6").text) });
-  } else if (def.id === 0) {
-    items.push({ label: "Apersepsi", value: s("section2").quiz !== undefined ? "Selesai" : "-" });
   } else if (def.id === 5) {
     items.push({ label: "Konsep Dasar — jawaban", value: str(s("section1").answer) });
     items.push({
@@ -113,10 +122,12 @@ export function buildModuleReport(
   return {
     moduleId: def.id,
     title: def.title,
+    description: def.description,
     items,
     runs: runsOf(def, experiments),
     rateUnit: def.experiment?.rateUnit,
     paramName: def.experiment?.paramName,
+    experiment: def.experiment,
   };
 }
 

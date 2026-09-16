@@ -140,7 +140,7 @@ export default function MonitoringPage() {
                           {p?.currentSection
                             ? `M${p.currentModule} · ${p.currentSection.replace("section", "Bag. ")}`
                             : p
-                              ? `M${p.currentModule ?? 0}`
+                              ? `M${p.currentModule ?? 1}`
                               : "-"}
                         </td>
                         <td className="px-3 py-2 text-xs text-slate-400 text-right whitespace-nowrap">

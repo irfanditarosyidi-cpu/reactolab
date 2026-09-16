@@ -28,7 +28,8 @@ export default function ModuleGrid({
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {MODULES.map((m) => {
           const mp = progress?.modules?.[String(m.id)];
-          const status = mp?.status ?? (m.id === 0 ? "unlocked" : "locked");
+          const rawStatus = mp?.status ?? (m.id === 1 ? "unlocked" : "locked");
+          const status = m.id === 1 && rawStatus === "locked" ? "unlocked" : rawStatus;
           const pct = mp?.completionPercent ?? 0;
           const clickable = status !== "locked";
           const grade = grades?.[`m${m.id}`];

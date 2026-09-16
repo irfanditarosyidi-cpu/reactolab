@@ -129,9 +129,11 @@ export default function M3SimStage({
     s.tempB = ROOM_T;
     s.pourProgress = 0;
     s.turbidity = 0;
+    s.micro = false;
     s.resetToken += 1;
     setPhase("idle");
     setElapsedUi(0);
+    setMicro(false);
     setStats({ effective: 0, ineffective: 0 });
   }, []);
 
@@ -374,7 +376,13 @@ export default function M3SimStage({
           {/* ---------------- 3D stage ---------------- */}
           <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="relative h-[88vw] max-h-[460px] min-h-[320px] sm:h-[380px] lg:h-[440px]">
-              <M3Scene3D shared={sharedRef} micro={micro} onStats={setStats} className="absolute inset-0" />
+              <M3Scene3D
+                shared={sharedRef}
+                micro={micro}
+                phase={phase}
+                onStats={setStats}
+                className="absolute inset-0"
+              />
             </div>
           </div>
 

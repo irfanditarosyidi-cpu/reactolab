@@ -352,7 +352,7 @@ export default function M2SimStage({
           <div className="rounded-xl bg-slate-50 px-3 py-2.5">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Waktu simulasi</p>
             <p className="mt-0.5 text-sm font-black tabular-nums text-slate-800">
-              {Math.floor(simTUi)} s <span className="text-[10px] text-slate-400">({TIME_SCALE}×)</span>
+              {Math.floor(simTUi)} s
             </p>
           </div>
           <div className="rounded-xl bg-slate-50 px-3 py-2.5">

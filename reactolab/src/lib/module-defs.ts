@@ -2,9 +2,6 @@
 // Every student module is ONE single page composed of sequential sections.
 
 export type SectionType =
-  | "m0welcome"
-  | "m0apersepsi"
-  | "m0missions"
   | "orientation"
   | "problem"
   | "hypothesis"
@@ -15,6 +12,7 @@ export type SectionType =
   | "m5equation"
   | "m5collision"
   | "m6intro"
+  | "m6cases"
   | "m6articles"
   | "m6cer"
   | "m6forum"
@@ -96,19 +94,6 @@ const INQUIRY_SECTIONS = (lastTitle = "Kesimpulan"): SectionDef[] => [
 
 export const MODULES: ModuleDef[] = [
   {
-    id: 0,
-    title: "Orientasi Awal",
-    short: "Orientasi",
-    emoji: "🚀",
-    description:
-      "Berkenalan dengan ReactoLab, mengamati fenomena reaksi cepat dan lambat, lalu melihat peta misi pembelajaranmu.",
-    sections: [
-      { id: "section1", title: "Selamat Datang", type: "m0welcome" },
-      { id: "section2", title: "Apersepsi: Reaksi Cepat & Lambat", type: "m0apersepsi" },
-      { id: "section3", title: "Peta Misi", type: "m0missions" },
-    ],
-  },
-  {
     id: 1,
     title: "Faktor Konsentrasi",
     short: "Konsentrasi",
@@ -129,7 +114,7 @@ export const MODULES: ModuleDef[] = [
       hintTerikat: "contoh: laju reaksi antara logam Mg dan larutan HCl",
     },
     hypothesis: {
-      subject: "Jika konsentrasi larutan HCl",
+      subject: "Jika konsentrasi larutan",
       directions: ["semakin besar", "semakin kecil"],
       effects: ["semakin cepat", "semakin lambat", "tidak berubah"],
     },
@@ -186,7 +171,7 @@ export const MODULES: ModuleDef[] = [
       hintTerikat: "contoh: laju reaksi CaCO₃ dengan larutan HCl",
     },
     hypothesis: {
-      subject: "Jika luas permukaan CaCO₃",
+      subject: "Jika luas permukaan zat padat",
       directions: ["semakin luas (bentuk serbuk)", "semakin kecil (bentuk bongkahan)"],
       effects: ["semakin cepat", "semakin lambat", "tidak berubah"],
     },
@@ -299,7 +284,7 @@ export const MODULES: ModuleDef[] = [
       hintTerikat: "contoh: laju penguraian H₂O₂ (pembentukan gas O₂)",
     },
     hypothesis: {
-      subject: "Jika ke dalam larutan H₂O₂",
+      subject: "Jika ke dalam suatu reaksi",
       directions: ["ditambahkan katalis", "tidak ditambahkan katalis"],
       effects: ["semakin cepat", "semakin lambat", "tidak berubah"],
     },
@@ -307,7 +292,7 @@ export const MODULES: ModuleDef[] = [
       kind: "catalyst",
       title: "Penguraian H₂O₂ dengan Berbagai Katalis",
       paramName: "Kondisi / Katalis",
-      minSelections: 3,
+      minSelections: 4,
       options: [
         { value: "tanpa", label: "Tanpa Katalis", factor: 0.35 },
         { value: "mno2", label: "MnO₂", factor: 6 },
@@ -353,11 +338,16 @@ export const MODULES: ModuleDef[] = [
       "Berdiskusi ilmiah dengan format Claim–Evidence–Reasoning berdasarkan studi kasus dari gurumu.",
     sections: [
       { id: "section1", title: "Pembuka Diskusi", type: "m6intro" },
-      { id: "section2", title: "Artikel & Pertanyaan", type: "m6articles" },
-      { id: "section3", title: "Pendapatmu (CER)", type: "m6cer" },
-      { id: "section4", title: "Forum Tanggapan", type: "m6forum" },
-      { id: "section5", title: "Pengambilan Keputusan", type: "m6decision" },
-      { id: "section6", title: "Kesimpulan Guru", type: "m6conclusion" },
+      {
+        id: "sectionCases",
+        title: "Rangkaian Studi Kasus",
+        type: "m6cases",
+      },
+      {
+        id: "sectionConclusion",
+        title: "Kesimpulan Guru",
+        type: "m6conclusion",
+      },
     ],
   },
   {
@@ -369,8 +359,6 @@ export const MODULES: ModuleDef[] = [
     sections: [{ id: "section1", title: "Selesai!", type: "m7closing" }],
   },
 ];
-
-export const TOTAL_MODULES = MODULES.length;
 
 export function getModuleDef(id: number): ModuleDef | undefined {
   return MODULES.find((m) => m.id === id);
@@ -475,6 +463,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "bertambahnya volume larutan per satuan waktu",
       "berkurangnya suhu per satuan waktu",
       "bertambahnya massa campuran per satuan waktu",
+      "tetapnya jumlah partikel selama reaksi",
     ],
     answer: 0,
     explain:
@@ -482,7 +471,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
   },
   {
     q: "Pita Mg bereaksi paling cepat dengan larutan HCl…",
-    options: ["0,5 M", "1,0 M", "2,0 M", "3,0 M"],
+    options: ["0,5 M", "1,0 M", "2,0 M", "3,0 M", "semua sama cepat"],
     answer: 3,
     explain: "Semakin besar konsentrasi, semakin banyak partikel per volume → tumbukan makin sering.",
   },
@@ -493,6 +482,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "luas permukaan sentuh serbuk lebih besar",
       "serbuk lebih murni",
       "bongkahan lebih mudah larut",
+      "suhu serbuk selalu lebih tinggi",
     ],
     answer: 1,
     explain: "Luas permukaan besar → bidang sentuh antar pereaksi bertambah → tumbukan makin banyak.",
@@ -504,6 +494,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "energi kinetik partikel naik sehingga tumbukan efektif bertambah",
       "konsentrasi bertambah",
       "tekanan turun",
+      "jumlah partikel pereaksi menjadi dua kali lipat",
     ],
     answer: 1,
     explain: "Suhu tidak mengubah Ea; suhu menaikkan energi kinetik partikel.",
@@ -515,13 +506,14 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "menurunkan energi aktivasi melalui jalur reaksi alternatif",
       "menaikkan energi aktivasi",
       "menambah jumlah produk",
+      "menaikkan entalpi reaksi",
     ],
     answer: 1,
     explain: "Katalis menyediakan mekanisme dengan Ea lebih rendah dan tidak habis bereaksi.",
   },
   {
     q: "Diketahui v = k[P][Q]². Jika [P] dan [Q] masing-masing diperbesar 2 kali, laju menjadi…",
-    options: ["2 kali", "4 kali", "6 kali", "8 kali"],
+    options: ["2 kali", "4 kali", "6 kali", "8 kali", "16 kali"],
     answer: 3,
     explain: "v' = k(2[P])(2[Q])² = 2 × 4 = 8 kali laju semula.",
   },
@@ -532,6 +524,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "puncak lebih rendah dan bergeser ke kanan",
       "kurva tidak berubah",
       "seluruh partikel berenergi sama",
+      "puncak lebih tinggi tanpa mengalami pergeseran",
     ],
     answer: 1,
     explain:
@@ -539,13 +532,19 @@ export const PRACTICE_BANK: PracticeQ[] = [
   },
   {
     q: "Satuan laju reaksi yang umum digunakan adalah…",
-    options: ["M s⁻¹", "mol", "gram", "liter"],
+    options: ["M s⁻¹", "mol", "gram", "liter", "mol² s⁻¹"],
     answer: 0,
     explain: "Laju = perubahan konsentrasi (M) per waktu (s) → M/s.",
   },
   {
     q: "Reaksi Na₂S₂O₃ + HCl menghasilkan larutan keruh karena terbentuk…",
-    options: ["gas H₂", "endapan belerang (S)", "gas CO₂", "endapan NaCl"],
+    options: [
+      "gas H₂",
+      "endapan belerang (S)",
+      "gas CO₂",
+      "endapan NaCl",
+      "uap air",
+    ],
     answer: 1,
     explain: "Endapan koloid belerang membuat larutan keruh hingga tanda X tak terlihat.",
   },
@@ -556,6 +555,7 @@ export const PRACTICE_BANK: PracticeQ[] = [
       "menggerus padatan menjadi serbuk",
       "menurunkan suhu campuran",
       "menambahkan katalis yang sesuai",
+      "memperbesar luas permukaan sentuh",
     ],
     answer: 2,
     explain: "Menurunkan suhu justru memperlambat gerak partikel dan mengurangi tumbukan efektif.",

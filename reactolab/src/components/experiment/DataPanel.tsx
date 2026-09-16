@@ -100,14 +100,16 @@ export default function DataPanel({
               <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
                 {isGas ? (
                   <>
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-2">
-                      <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                        V pada 10 s
-                      </dt>
-                      <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
-                        {v10 ?? "—"} mL
-                      </dd>
-                    </div>
+                    {cfg.kind !== "surface" && (
+                      <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                        <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                          V pada 10 s
+                        </dt>
+                        <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
+                          {v10 ?? "—"} mL
+                        </dd>
+                      </div>
+                    )}
                     <div className="rounded-lg bg-slate-50 px-2.5 py-2">
                       <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                         V akhir
@@ -117,7 +119,7 @@ export default function DataPanel({
                       </dd>
                     </div>
                     {cfg.kind === "surface" && (
-                      <div className="col-span-2 rounded-lg bg-slate-50 px-2.5 py-2">
+                      <div className="rounded-lg bg-slate-50 px-2.5 py-2">
                         <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
                           Reaksi selesai pada
                         </dt>
@@ -206,13 +208,16 @@ export default function DataPanel({
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-cyan-700">
                     t = {row.t} detik
                   </p>
-                  <dl className="mt-2 grid grid-cols-2 gap-1.5">
+                  <dl className="mt-2 grid grid-cols-3 gap-1">
                     {list.map((run) => (
-                      <div key={run.paramValue} className="rounded-lg bg-slate-50 px-2 py-1.5">
-                        <dt className="truncate text-[9px] font-bold text-slate-500">
+                      <div
+                        key={run.paramValue}
+                        className="min-w-0 rounded-lg bg-slate-50 px-1.5 py-1.5"
+                      >
+                        <dt className="truncate text-[8px] font-bold text-slate-500">
                           {run.label}
                         </dt>
-                        <dd className="font-mono text-xs font-black tabular-nums text-slate-800">
+                        <dd className="font-mono text-[11px] font-black tabular-nums text-slate-800">
                           {row[run.label] ?? "—"} mL
                         </dd>
                       </div>
@@ -266,15 +271,37 @@ export default function DataPanel({
             </p>
             <div className="h-52 sm:h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={gasRows} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                <LineChart data={gasRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
                     dataKey="t"
                     tick={{ fontSize: 11 }}
-                    label={{ value: "t (s)", position: "insideBottomRight", offset: -2, fontSize: 11 }}
+                    height={42}
+                    label={{
+                      value: "Waktu (s)",
+                      position: "insideBottom",
+                      offset: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                    }}
                   />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    width={58}
+                    label={{
+                      value: cfg.timeLabel,
+                      angle: -90,
+                      position: "insideLeft",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                      style: { textAnchor: "middle" },
+                    }}
+                  />
+                  <Tooltip
+                    itemSorter={(item) => -Number(item.value ?? 0)}
+                  />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {list.map((r, i) => (
                     <Line
@@ -297,10 +324,34 @@ export default function DataPanel({
             </p>
             <div className="h-52 sm:h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="x" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis
+                    dataKey="x"
+                    tick={{ fontSize: 11 }}
+                    height={42}
+                    label={{
+                      value: cfg.chartX,
+                      position: "insideBottom",
+                      offset: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                    }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    width={58}
+                    label={{
+                      value: cfg.timeLabel,
+                      angle: -90,
+                      position: "insideLeft",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                      style: { textAnchor: "middle" },
+                    }}
+                  />
                   <Tooltip />
                   <Line
                     type="monotone"
@@ -322,10 +373,34 @@ export default function DataPanel({
           <div className="h-52 sm:h-56">
             <ResponsiveContainer width="100%" height="100%">
               {cfg.numericParam ? (
-                <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="x" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis
+                    dataKey="x"
+                    tick={{ fontSize: 11 }}
+                    height={42}
+                    label={{
+                      value: cfg.chartX,
+                      position: "insideBottom",
+                      offset: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                    }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    width={58}
+                    label={{
+                      value: `Laju reaksi (${cfg.rateUnit})`,
+                      angle: -90,
+                      position: "insideLeft",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                      style: { textAnchor: "middle" },
+                    }}
+                  />
                   <Tooltip />
                   <Line
                     type="monotone"
@@ -336,10 +411,34 @@ export default function DataPanel({
                   />
                 </LineChart>
               ) : (
-                <BarChart data={rateRows} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+                <BarChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11 }}
+                    height={42}
+                    label={{
+                      value: cfg.chartX,
+                      position: "insideBottom",
+                      offset: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                    }}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    width={58}
+                    label={{
+                      value: `Laju reaksi (${cfg.rateUnit})`,
+                      angle: -90,
+                      position: "insideLeft",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      fill: "#475569",
+                      style: { textAnchor: "middle" },
+                    }}
+                  />
                   <Tooltip />
                   <Bar
                     dataKey="laju"

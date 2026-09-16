@@ -267,7 +267,11 @@ export default function SimStage({
             <Search className="h-3.5 w-3.5" /> Panel Zoom Submikroskopik — {opt.label}
           </div>
           {cfg.kind === "catalyst" ? (
-            <M4MechanismView progress={progress} catalystLabel={opt.label} />
+            <M4MechanismView
+              progress={progress}
+              catalystLabel={opt.label}
+              running={running}
+            />
           ) : <>
           <div className="h-44 bg-[#0f2a5e]">
             <ParticleView cfg={{ kind: cfg.kind, factor: opt.factor, maxFactor }} width={640} height={176} />
