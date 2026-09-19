@@ -92,7 +92,7 @@ export default function ModulePageView() {
           </h2>
           <p className="mt-1 text-sm text-emerald-800">
             {moduleId === 7
-              ? "Seluruh rangkaian pembelajaran ReactoLab telah kamu tuntaskan."
+              ? "Seluruh rangkaian pembelajaran ChemSpace telah kamu tuntaskan."
               : "Kamu bebas memilih: lanjut sekarang, atau berhenti dulu dan lanjutkan di sesi berikutnya."}
           </p>
           <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">

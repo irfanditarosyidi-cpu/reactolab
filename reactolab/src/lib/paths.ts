@@ -37,6 +37,12 @@ export const P = {
     `grades/${cid}/${uid}/m${m}`,
   practiceConfigs: "practiceConfigs",
   practiceConfig: (cid: string) => `practiceConfigs/${cid}`,
+  scaffoldConfigs: "scaffoldConfigs",
+  scaffoldModule: (moduleId: number) => `scaffoldConfigs/${moduleId}`,
+  scaffoldField: (moduleId: number, field: string) =>
+    `scaffoldConfigs/${moduleId}/${field}`,
+  scaffoldSettings: "scaffoldSettings",
+  scaffoldSetting: (cid: string) => `scaffoldSettings/${cid}`,
   resetRequests: "passwordResetRequests",
   audit: "auditLogs",
 };

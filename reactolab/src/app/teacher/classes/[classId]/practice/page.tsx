@@ -227,7 +227,7 @@ export default function TeacherPracticePage() {
       <Card>
         <CardHeader
           title="Sumber Soal"
-          subtitle="Pilih bank bawaan ReactoLab atau susun soal sendiri."
+          subtitle="Pilih bank bawaan ChemSpace atau susun soal sendiri."
         />
         <CardBody className="grid gap-3 md:grid-cols-2">
           <button
@@ -244,7 +244,7 @@ export default function TeacherPracticePage() {
               {mode === "default" && <Check className="h-5 w-5 text-brand-600" />}
             </span>
             <span className="mt-1 block text-xs leading-relaxed text-slate-500">
-              {PRACTICE_BANK.length} soal bawaan ReactoLab, masing-masing memiliki 5 opsi
+              {PRACTICE_BANK.length} soal bawaan ChemSpace, masing-masing memiliki 5 opsi
               jawaban dan pembahasan.
             </span>
           </button>

@@ -5,6 +5,11 @@ import { get, ref } from "firebase/database";
 import { db } from "./firebase/client";
 import { P } from "./paths";
 import { buildAllReports, type ModuleReport } from "./format";
+import {
+  buildGasComparisonRows,
+  reportedRateLabel,
+  reportedRateValue,
+} from "./runs";
 import type { ClassInfo, ExperimentRun, UserProfile } from "./types";
 import { formatDateTime } from "./utils";
 
@@ -134,7 +139,7 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text(pdfText(`LKPD ReactoLab | ${studentName}`), MARGIN, 10);
+    doc.text(pdfText(`LKPD ChemSpace | ${studentName}`), MARGIN, 10);
     if (activeModule) {
       doc.setFont("helvetica", "normal");
       doc.text(pdfText(activeModule), PAGE_WIDTH - MARGIN, 10, { align: "right" });
@@ -333,7 +338,8 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     const plotY = top + 10;
     const plotWidth = CONTENT_WIDTH - 23;
     const plotHeight = 43;
-    const maxValue = Math.max(...runs.map((run) => run.rate), 0.0001) * 1.1;
+    const maxValue =
+      Math.max(...runs.map((run) => reportedRateValue(run)), 0.0001) * 1.1;
     const slotWidth = plotWidth / runs.length;
     const barWidth = Math.min(18, slotWidth * 0.55);
 
@@ -352,7 +358,7 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     doc.text(displayNumber(maxValue, 3), plotX - 2, plotY + 1, { align: "right" });
 
     runs.forEach((run, index) => {
-      const height = (run.rate / maxValue) * plotHeight;
+      const height = (reportedRateValue(run) / maxValue) * plotHeight;
       const x = plotX + index * slotWidth + (slotWidth - barWidth) / 2;
       const color = CHART_COLORS[index % CHART_COLORS.length];
       doc.setFillColor(...color);
@@ -435,23 +441,30 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     let rows: string[][];
     if (isGas) {
       const includeFinish = cfg.kind === "surface";
+      const includeFinalVolume = cfg.kind !== "surface";
       columns = [
         { header: "No.", width: 10, align: "center" },
         { header: cfg.paramName, width: includeFinish ? 46 : 58 },
-        { header: "V 10 s (mL)", width: 27, align: "center" },
-        { header: "V akhir (mL)", width: 28, align: "center" },
-        ...(includeFinish
-          ? ([{ header: "Selesai (s)", width: 29, align: "center" }] as TableColumn[])
+        {
+          header: includeFinish ? "Volume (mL)" : "V 10 s (mL)",
+          width: includeFinish ? 34 : 27,
+          align: "center",
+        },
+        ...(includeFinalVolume
+          ? ([{ header: "V akhir (mL)", width: 28, align: "center" }] as TableColumn[])
           : []),
-        { header: `Laju (${cfg.rateUnit})`, width: includeFinish ? 38 : 55, align: "center" },
+        ...(includeFinish
+          ? ([{ header: "Waktu (s)", width: 34, align: "center" }] as TableColumn[])
+          : []),
+        { header: `Laju (${cfg.rateUnit})`, width: includeFinish ? 54 : 55, align: "center" },
       ];
       rows = report.runs.map((run, index) => [
         String(index + 1),
         run.label,
         displayNumber(volumeAt(run, 10)),
-        displayNumber(finalVolume(run)),
-        ...(includeFinish ? [displayNumber(run.timeSec, 1)] : []),
-        run.rateLabel,
+        ...(includeFinalVolume ? [displayNumber(finalVolume(run))] : []),
+        ...(includeFinish ? ["10"] : []),
+        reportedRateLabel(run, cfg.rateUnit),
       ]);
     } else {
       columns = [
@@ -464,16 +477,14 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
         String(index + 1),
         run.label,
         `${displayNumber(run.timeSec, 1)} s`,
-        run.rateLabel,
+        reportedRateLabel(run, cfg.rateUnit),
       ]);
     }
     drawTable("Ringkasan Data Percobaan", columns, rows);
 
     if (isGas) {
-      const times = Array.from(
-        new Set(report.runs.flatMap((run) => (run.series ?? []).map((point) => point.t)))
-      ).sort((a, b) => a - b);
-      if (times.length > 0) {
+      const gasRows = buildGasComparisonRows(cfg, report.runs);
+      if (gasRows.length > 0) {
         const timeWidth = 24;
         const valueWidth = (CONTENT_WIDTH - timeWidth) / report.runs.length;
         drawTable(
@@ -486,16 +497,24 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
               align: "center" as const,
             })),
           ],
-          times.map((time) => [
-            String(time),
-            ...report.runs.map((run) =>
-              displayNumber(run.series?.find((point) => point.t === time)?.v)
-            ),
+          gasRows.map((row) => [
+            String(row.t),
+            ...report.runs.map((run) => displayNumber(row[run.label])),
           ])
         );
       }
       writeSectionTitle("Grafik Hasil Percobaan");
-      drawGasChart("Grafik Volume Gas terhadap Waktu", report.runs);
+      const chartRuns =
+        cfg.kind === "surface"
+          ? report.runs.map((run) => ({
+              ...run,
+              series: gasRows.map((row) => ({
+                t: row.t,
+                v: row[run.label] ?? 0,
+              })),
+            }))
+          : report.runs;
+      drawGasChart("Grafik Volume Gas terhadap Waktu", chartRuns);
     } else {
       writeSectionTitle("Grafik Hasil Percobaan");
       drawLineMetricChart(
@@ -521,7 +540,7 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(17);
-  doc.text("LKPD REACTOLAB", MARGIN, 14);
+  doc.text("LKPD CHEMSPACE", MARGIN, 14);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.text("Lembar Kerja Peserta Didik - Laju Reaksi Berbasis Inkuiri Terbimbing", MARGIN, 22);
@@ -593,7 +612,7 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text("ReactoLab v1.2", MARGIN, 292);
+    doc.text("ChemSpace v1.2", MARGIN, 292);
     doc.text(`Halaman ${page} dari ${pageCount}`, PAGE_WIDTH - MARGIN, 292, {
       align: "right",
     });
@@ -603,5 +622,5 @@ export async function downloadLkpdPdf(classId: string, uid: string): Promise<voi
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
     .trim()
     .replace(/\s+/g, "_") || "siswa";
-  doc.save(`LKPD-ReactoLab-${safeName}.pdf`);
+  doc.save(`LKPD-ChemSpace-${safeName}.pdf`);
 }

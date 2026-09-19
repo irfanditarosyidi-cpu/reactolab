@@ -3,12 +3,23 @@
 // Generic guided-inquiry sections used by Modules 1–4 (PRD §16).
 
 import { useState } from "react";
-import { CheckCircle2, FlaskConical, Lightbulb } from "lucide-react";
+import { CheckCircle2, FlaskConical, Lightbulb, TriangleAlert } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { Help, Input, Label, Select, Textarea } from "@/components/ui/forms";
+import { Help, Input, Label, Textarea } from "@/components/ui/forms";
 import { useEngine } from "../engine";
-import { sortRuns } from "@/lib/runs";
+import { reportedRateLabel, sortRuns } from "@/lib/runs";
+import {
+  normalizeProblemAnswer,
+  validateProblemAnswer,
+  type ProblemValidationResult,
+} from "@/lib/problem-validation";
+import {
+  normalizeHypothesisAnswer,
+  validateHypothesisAnswer,
+  type HypothesisValidationResult,
+} from "@/lib/hypothesis-validation";
 import { getYouTubeEmbedUrl } from "@/lib/youtube";
+import { customScaffoldTerms } from "@/lib/scaffold-config";
 import type { ModuleDef, SectionDef } from "@/lib/module-defs";
 import type {
   ConclusionDraft,
@@ -127,10 +138,51 @@ export function OrientationSection({ sec, readOnly }: SectionProps) {
 // ---------- Section 2: Rumusan Masalah ----------
 
 export function ProblemSection({ sec, readOnly }: SectionProps) {
-  const { def, drafts, updateDraft, completeSection } = useEngine();
+  const {
+    moduleId,
+    drafts,
+    scaffoldTerms,
+    scaffoldingEnabled,
+    updateDraft,
+    completeSection,
+  } = useEngine();
   const d = (drafts[sec.id] ?? {}) as ProblemDraft;
-  const valid =
-    (d.varBebas ?? "").trim().length >= 3 && (d.varTerikat ?? "").trim().length >= 3;
+  const [attempts, setAttempts] = useState(0);
+  const [checked, setChecked] = useState<{
+    answerKey: string;
+    result: ProblemValidationResult;
+  } | null>(null);
+  const independentValue = d.varBebas ?? "";
+  const dependentValue = d.varTerikat ?? "";
+  const answerKey = `${normalizeProblemAnswer(independentValue)}|${normalizeProblemAnswer(
+    dependentValue
+  )}`;
+  const feedback =
+    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const canAttempt =
+    independentValue.trim().length >= 3 && dependentValue.trim().length >= 3;
+
+  const continueIfValid = async () => {
+    if (!scaffoldingEnabled) {
+      setChecked(null);
+      await completeSection(sec.id);
+      return;
+    }
+    const nextAttempt = attempts + 1;
+    const result = validateProblemAnswer(
+      moduleId,
+      independentValue,
+      dependentValue,
+      nextAttempt,
+      {
+        independent: customScaffoldTerms(scaffoldTerms, "problem_independent"),
+        dependent: customScaffoldTerms(scaffoldTerms, "problem_dependent"),
+      }
+    );
+    setAttempts(nextAttempt);
+    setChecked({ answerKey, result });
+    if (result.valid) await completeSection(sec.id);
+  };
 
   return (
     <div>
@@ -142,15 +194,21 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
           <span>Bagaimana pengaruh</span>
           <Input
             className="w-full sm:w-64 inline-block"
-            value={d.varBebas ?? ""}
+            value={independentValue}
             disabled={readOnly}
+            placeholder="Variabel bebas"
+            aria-label="Variabel bebas pada rumusan masalah"
+            aria-invalid={Boolean(feedback && !feedback.independent.valid)}
             onChange={(e) => updateDraft(sec.id, { varBebas: e.target.value })}
           />
           <span>terhadap</span>
           <Input
             className="w-full sm:w-72 inline-block"
-            value={d.varTerikat ?? ""}
+            value={dependentValue}
             disabled={readOnly}
+            placeholder="Variabel terikat"
+            aria-label="Variabel terikat pada rumusan masalah"
+            aria-invalid={Boolean(feedback && !feedback.dependent.valid)}
             onChange={(e) => updateDraft(sec.id, { varTerikat: e.target.value })}
           />
           <span>?</span>
@@ -162,11 +220,53 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
       </Help>
 
       {!readOnly && (
-        <CompleteBar
-          valid={valid}
-          onComplete={() => completeSection(sec.id)}
-          hint="Lengkapi kedua bagian rumusan masalah."
-        />
+        <>
+          {feedback && (
+            <div
+              role="status"
+              className={
+                "mt-3 rounded-xl border px-3 py-3 text-sm " +
+                (feedback.valid
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-amber-200 bg-amber-50 text-amber-900")
+              }
+            >
+              {feedback.swapped ? (
+                <p className="flex items-start gap-2 font-semibold">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  {feedback.independent.message}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {[
+                    ["Variabel bebas", feedback.independent],
+                    ["Variabel terikat", feedback.dependent],
+                  ].map(([label, field]) => {
+                    const fieldFeedback = field as ProblemValidationResult["independent"];
+                    return (
+                      <p key={label as string} className="flex items-start gap-2">
+                        {fieldFeedback.valid ? (
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        ) : (
+                          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                        )}
+                        <span>
+                          <b>{label as string}:</b> {fieldFeedback.message}
+                        </span>
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <CompleteBar
+            valid={canAttempt}
+            onComplete={continueIfValid}
+            hint="Lengkapi kedua bagian rumusan masalah untuk melanjutkan."
+          />
+        </>
       )}
     </div>
   );
@@ -175,10 +275,58 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
 // ---------- Section 3: Hipotesis ----------
 
 export function HypothesisSection({ sec, readOnly }: SectionProps) {
-  const { def, drafts, updateDraft, completeSection } = useEngine();
+  const {
+    moduleId,
+    def,
+    drafts,
+    scaffoldTerms,
+    scaffoldingEnabled,
+    updateDraft,
+    completeSection,
+  } = useEngine();
   const d = (drafts[sec.id] ?? {}) as HypothesisDraft;
   const h = def.hypothesis!;
-  const valid = Boolean(d.direction && d.effect && (d.reason ?? "").trim().length >= 10);
+  const [attempts, setAttempts] = useState(0);
+  const [checked, setChecked] = useState<{
+    answerKey: string;
+    result: HypothesisValidationResult;
+  } | null>(null);
+  const directionValue = d.direction ?? "";
+  const effectValue = d.effect ?? "";
+  const reasonValue = d.reason ?? "";
+  const answerKey = [directionValue, effectValue, reasonValue]
+    .map(normalizeHypothesisAnswer)
+    .join("|");
+  const feedback =
+    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const canAttempt =
+    directionValue.trim().length >= 3 &&
+    effectValue.trim().length >= 3 &&
+    reasonValue.trim().length >= 10;
+
+  const continueIfValid = async () => {
+    if (!scaffoldingEnabled) {
+      setChecked(null);
+      await completeSection(sec.id);
+      return;
+    }
+    const nextAttempt = attempts + 1;
+    const result = validateHypothesisAnswer(
+      moduleId,
+      directionValue,
+      effectValue,
+      reasonValue,
+      nextAttempt,
+      {
+        directions: customScaffoldTerms(scaffoldTerms, "hypothesis_direction"),
+        effects: customScaffoldTerms(scaffoldTerms, "hypothesis_effect"),
+        reasons: customScaffoldTerms(scaffoldTerms, "hypothesis_reason"),
+      }
+    );
+    setAttempts(nextAttempt);
+    setChecked({ answerKey, result });
+    if (result.valid) await completeSection(sec.id);
+  };
 
   return (
     <div>
@@ -188,53 +336,76 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-slate-800 font-semibold">
           <span>{h.subject}</span>
-          <Select
-            className="w-auto"
-            value={d.direction ?? ""}
+          <Input
+            className="w-full sm:w-52"
+            value={directionValue}
             disabled={readOnly}
             onChange={(e) => updateDraft(sec.id, { direction: e.target.value })}
-          >
-            <option value="" disabled>
-              — pilih —
-            </option>
-            {h.directions.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </Select>
+            placeholder="Tuliskan perubahannya"
+            aria-label="Perubahan variabel pada hipotesis"
+            aria-invalid={Boolean(feedback && !feedback.direction.valid)}
+          />
           <span>, maka laju reaksi akan</span>
-          <Select
-            className="w-auto"
-            value={d.effect ?? ""}
+          <Input
+            className="w-full sm:w-52"
+            value={effectValue}
             disabled={readOnly}
             onChange={(e) => updateDraft(sec.id, { effect: e.target.value })}
-          >
-            <option value="" disabled>
-              — pilih —
-            </option>
-            {h.effects.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </Select>
+            placeholder="Tuliskan dampaknya"
+            aria-label="Dampak terhadap laju reaksi pada hipotesis"
+            aria-invalid={Boolean(feedback && !feedback.effect.valid)}
+          />
           <span>, karena…</span>
         </div>
         <Textarea
-          value={d.reason ?? ""}
+          value={reasonValue}
           disabled={readOnly}
           onChange={(e) => updateDraft(sec.id, { reason: e.target.value })}
           placeholder="Tuliskan alasan ilmiahmu (hubungkan dengan tumbukan antar-partikel)…"
           rows={3}
+          aria-invalid={Boolean(feedback && !feedback.reason.valid)}
         />
       </div>
 
+      {!readOnly && feedback && (
+        <div
+          role="status"
+          className={
+            "mt-3 rounded-xl border px-3 py-3 text-sm " +
+            (feedback.valid
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-900")
+          }
+        >
+          <div className="space-y-2">
+            {[
+              ["Arah perubahan", feedback.direction],
+              ["Dampak", feedback.effect],
+              ["Alasan ilmiah", feedback.reason],
+            ].map(([label, field]) => {
+              const fieldFeedback = field as HypothesisValidationResult["direction"];
+              return (
+                <p key={label as string} className="flex items-start gap-2">
+                  {fieldFeedback.valid ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  <span>
+                    <b>{label as string}:</b> {fieldFeedback.message}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {!readOnly && (
         <CompleteBar
-          valid={valid}
-          onComplete={() => completeSection(sec.id)}
-          hint="Pilih arah, dampak, dan tulis alasannya (≥ 10 karakter)."
+          valid={canAttempt}
+          onComplete={continueIfValid}
+          hint="Isi arah perubahan, dampak, dan alasan ilmiah untuk melanjutkan."
         />
       )}
     </div>
@@ -279,7 +450,9 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
               {orderedRuns.map((r) => (
                 <tr key={r.paramValue} className="border-t border-slate-100">
                   <td className="py-1.5 pr-2 font-semibold text-slate-700">{r.label}</td>
-                  <td className="py-1.5 pr-2 text-slate-600">{r.rateLabel}</td>
+                  <td className="py-1.5 pr-2 text-slate-600">
+                    {reportedRateLabel(r, cfg.rateUnit)}
+                  </td>
                 </tr>
               ))}
             </tbody>

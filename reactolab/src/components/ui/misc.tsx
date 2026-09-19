@@ -1,5 +1,6 @@
 "use client";
 
+import BrandLogo from "@/components/layout/BrandLogo";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -88,9 +89,11 @@ export function Spinner({ label }: { label?: string }) {
 export function FullPageSpinner({ label = "Memuat…" }: { label?: string }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
-      <div className="h-12 w-12 rounded-2xl bg-brand-600 text-white flex items-center justify-center font-black text-lg shadow-card">
-        R
-      </div>
+      <BrandLogo
+        variant="mark"
+        className="h-16 w-16 drop-shadow-[0_8px_12px_rgba(37,99,235,0.18)]"
+        priority
+      />
       <div className="flex items-center gap-2 text-slate-500 text-sm">
         <Loader2 className="h-4 w-4 animate-spin text-brand-600" /> {label}
       </div>

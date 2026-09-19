@@ -18,6 +18,7 @@ import { buildModuleReport } from "@/lib/format";
 import { MODULES } from "@/lib/module-defs";
 import { MODULE_STATUS_LABEL } from "@/lib/progress";
 import { P } from "@/lib/paths";
+import { reportedRateLabel } from "@/lib/runs";
 import { formatRelative } from "@/lib/utils";
 import type { ClassMembership, StudentProgress, TeacherGrade } from "@/lib/types";
 
@@ -243,7 +244,9 @@ export default function TeacherStudentDetail() {
                                     <td className="px-3 py-1.5 text-slate-600">
                                       {r.timeSec?.toFixed(1) ?? "-"}
                                     </td>
-                                    <td className="px-3 py-1.5 text-slate-600">{r.rateLabel}</td>
+                                    <td className="px-3 py-1.5 text-slate-600">
+                                      {reportedRateLabel(r, report.rateUnit ?? "")}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

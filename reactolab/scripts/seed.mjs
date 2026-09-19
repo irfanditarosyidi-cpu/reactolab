@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * ReactoLab seed script — create the initial admin/teacher account.
+ * ChemSpace seed script — create the initial admin/teacher account.
  *
  * Usage:
  *   FIREBASE_SERVICE_ACCOUNT='<json | base64>' \
- *   node scripts/seed.mjs --email admin@sekolah.sch.id --password rahasia123 --name "Admin ReactoLab" --role admin
+ *   node scripts/seed.mjs --email admin@sekolah.sch.id --password rahasia123 --name "Admin ChemSpace" --role admin
  *
  * Alternatively point to a key file:
  *   FIREBASE_SERVICE_ACCOUNT_FILE=./serviceAccountKey.json node scripts/seed.mjs ...
@@ -51,7 +51,7 @@ function loadServiceAccount() {
 
 const email = (arg("email") ?? "").trim().toLowerCase();
 const password = arg("password") ?? "";
-const name = arg("name") ?? "Admin ReactoLab";
+const name = arg("name") ?? "Admin ChemSpace";
 const role = arg("role") ?? "admin";
 
 if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 6) {

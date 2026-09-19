@@ -80,3 +80,72 @@ export function runNumericValue(cfg: ExperimentConfig, r: ExperimentRun): number
   if (Number.isFinite(parsed)) return parsed;
   return cfg.options.find((o) => o.value === r.paramValue)?.factor ?? 0;
 }
+
+/** A valid rate explicitly calculated and entered by the student. */
+export function studentRateValue(run: ExperimentRun | null | undefined): number | null {
+  const value = run?.studentRate;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
+
+/** Student answer when available, with the old automatic value as legacy fallback. */
+export function reportedRateValue(run: ExperimentRun): number {
+  return studentRateValue(run) ?? run.rate;
+}
+
+/** Display label for reports, teacher views, and finalized/legacy experiment data. */
+export function reportedRateLabel(run: ExperimentRun, unit: string): string {
+  const studentRate = studentRateValue(run);
+  if (studentRate === null) return run.rateLabel;
+  return `${String(studentRate).replace(".", ",")} ${unit}`.trim();
+}
+
+/**
+ * Merge gas-volume series for a comparison table/chart. In Module 2, faster
+ * shapes stay at the shared final CO₂ volume until the slowest reaction ends.
+ */
+export function buildGasComparisonRows(
+  cfg: ExperimentConfig,
+  runs: ExperimentRun[]
+): Array<Record<string, number>> {
+  if (cfg.kind !== "surface") {
+    const rows = new Map<number, Record<string, number>>();
+    for (const run of runs) {
+      for (const point of run.series ?? []) {
+        const row = rows.get(point.t) ?? { t: point.t };
+        row[run.label] = point.v;
+        rows.set(point.t, row);
+      }
+    }
+    return Array.from(rows.values()).sort((a, b) => a.t - b.t);
+  }
+
+  const sampleEvery = cfg.gas?.sampleEvery ?? 10;
+  const finalVolume = cfg.gas?.vmax ?? 0;
+  const slowestTime = Math.max(
+    0,
+    ...runs.map(
+      (run) => run.timeSec ?? run.series?.[run.series.length - 1]?.t ?? 0
+    )
+  );
+  const finalTime = Math.ceil(slowestTime / sampleEvery) * sampleEvery;
+  const rows: Array<Record<string, number>> = [];
+
+  for (let time = 0; time <= finalTime; time += sampleEvery) {
+    const row: Record<string, number> = { t: time };
+    for (const run of runs) {
+      const completionTime =
+        run.timeSec ?? run.series?.[run.series.length - 1]?.t ?? 0;
+      if (time >= completionTime) {
+        row[run.label] = finalVolume;
+        continue;
+      }
+      const points = run.series ?? [];
+      const point = [...points].reverse().find((candidate) => candidate.t <= time);
+      row[run.label] = point?.v ?? 0;
+    }
+    rows.push(row);
+  }
+  return rows;
+}

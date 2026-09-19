@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -23,39 +24,54 @@ const ToastCtx = createContext<{
 } | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<ToastItem[]>([]);
+  const [item, setItem] = useState<ToastItem | null>(null);
   const idRef = useRef(1);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const toast = useCallback((text: string, kind: ToastKind = "info") => {
     const id = idRef.current++;
-    setItems((prev) => [...prev, { id, kind, text }]);
-    setTimeout(() => {
-      setItems((prev) => prev.filter((t) => t.id !== id));
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    setItem({ id, kind, text });
+    timeoutRef.current = setTimeout(() => {
+      setItem((current) => (current?.id === id ? null : current));
+      timeoutRef.current = null;
     }, 4200);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    },
+    []
+  );
 
   return (
     <ToastCtx.Provider value={{ toast }}>
       {children}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92vw] max-w-md pointer-events-none">
-        {items.map((t) => (
+        {item && (
           <div
-            key={t.id}
+            key={item.id}
             className={cn(
               "pointer-events-auto flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm shadow-lg bg-white",
-              t.kind === "success" && "border-emerald-200",
-              t.kind === "error" && "border-red-200",
-              t.kind === "info" && "border-brand-200"
+              item.kind === "success" && "border-emerald-200",
+              item.kind === "error" && "border-red-200",
+              item.kind === "info" && "border-brand-200"
             )}
           >
-            {t.kind === "success" && (
+            {item.kind === "success" && (
               <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
             )}
-            {t.kind === "error" && <XCircle className="h-5 w-5 text-red-600 shrink-0" />}
-            {t.kind === "info" && <Info className="h-5 w-5 text-brand-600 shrink-0" />}
-            <span className="text-slate-700">{t.text}</span>
+            {item.kind === "error" && (
+              <XCircle className="h-5 w-5 text-red-600 shrink-0" />
+            )}
+            {item.kind === "info" && (
+              <Info className="h-5 w-5 text-brand-600 shrink-0" />
+            )}
+            <span className="text-slate-700">{item.text}</span>
           </div>
-        ))}
+        )}
       </div>
     </ToastCtx.Provider>
   );

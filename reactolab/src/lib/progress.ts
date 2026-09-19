@@ -1,6 +1,29 @@
 import { MODULES, getModuleDef } from "./module-defs";
 import type { ModuleProgress, SectionProgress, StudentProgress } from "./types";
 
+export const CLOSING_MODULE_ID = 7;
+export const CLOSING_PREREQUISITE_IDS = [1, 2, 3, 4, 5, 6] as const;
+
+export function closingPrerequisitesComplete(progress: StudentProgress): boolean {
+  return CLOSING_PREREQUISITE_IDS.every(
+    (moduleId) => progress.modules?.[String(moduleId)]?.status === "completed"
+  );
+}
+
+export function lockedModuleProgress(moduleId: number): ModuleProgress {
+  const def = getModuleDef(moduleId);
+  const sections: Record<string, SectionProgress> = {};
+  for (const section of def?.sections ?? []) {
+    sections[section.id] = { status: "locked" };
+  }
+  return {
+    status: "locked",
+    currentSection: null,
+    completionPercent: 0,
+    sections,
+  };
+}
+
 /** Fresh progress skeleton: Module 1 unlocked, the rest locked. */
 export function buildProgressSkeleton(): StudentProgress {
   const modules: Record<string, ModuleProgress> = {};
@@ -63,6 +86,17 @@ export function normalizeProgress(progress: StudentProgress): StudentProgress {
           ? { status: "completed", completedAt: module6.completedAt }
           : { status: "locked" },
       },
+    };
+  }
+
+  // Module 7 is only valid while every prerequisite module remains complete.
+  const normalizedForPrerequisites = { ...progress, modules };
+  if (!closingPrerequisitesComplete(normalizedForPrerequisites)) {
+    modules[String(CLOSING_MODULE_ID)] = lockedModuleProgress(CLOSING_MODULE_ID);
+  } else if (modules[String(CLOSING_MODULE_ID)]?.status === "locked") {
+    modules[String(CLOSING_MODULE_ID)] = {
+      ...modules[String(CLOSING_MODULE_ID)],
+      status: "unlocked",
     };
   }
 

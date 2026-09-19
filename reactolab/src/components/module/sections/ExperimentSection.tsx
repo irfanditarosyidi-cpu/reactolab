@@ -28,6 +28,8 @@ import {
   SymbolicPanel,
   explainComplete,
 } from "@/components/experiment/panels";
+import { safeKey, studentRateValue } from "@/lib/runs";
+import { customScaffoldTerms } from "@/lib/scaffold-config";
 import { useEngine } from "../engine";
 import type { SectionProps } from "./InquirySections";
 import type { ExperimentDraft } from "@/lib/types";
@@ -87,9 +89,13 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
     def,
     drafts,
     runs,
+    scaffoldTerms,
+    scaffoldingEnabled,
     updateDraft,
     completeSection,
     recordRun,
+    updateRunRate,
+    updateRunReactionOrder,
     resetExperiment,
   } = useEngine();
   const { toast } = useToast();
@@ -112,21 +118,40 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
     return cfg.options.some((option) => option.value === value);
   });
   const setupLocked = Boolean(d.setupLocked);
+  const selectedCatalystValues =
+    moduleId === 4 ? selected.filter((value) => value !== "tanpa") : [];
   const requiredRunValues =
-    moduleId === 4 ? cfg.options.map((option) => option.value) : selected;
+    moduleId === 4 ? ["tanpa", ...selectedCatalystValues] : selected;
+  const hasMinimumSelections =
+    moduleId === 4
+      ? selectedCatalystValues.length >= cfg.minSelections
+      : requiredRunValues.length >= cfg.minSelections;
   const doneRuns = orderedRuns(cfg, runs);
   const allRunsDone =
     setupLocked &&
-    requiredRunValues.length >= cfg.minSelections &&
+    hasMinimumSelections &&
     requiredRunValues.every((v) =>
       Boolean(runs[v.replace(/[.#$/[\]]/g, "_")]),
     );
+  const allRatesEntered =
+    allRunsDone &&
+    requiredRunValues.every(
+      (value) => studentRateValue(runs[safeKey(value)]) !== null
+    );
+  const allReactionOrdersEntered =
+    moduleId !== 1 ||
+    (allRunsDone &&
+      requiredRunValues.every((value) =>
+        Number.isFinite(runs[safeKey(value)]?.studentReactionOrder)
+      ));
+  const allDataEntered = allRatesEntered && allReactionOrdersEntered;
   const symbolicOk = Boolean(d.symbolicOk);
   const explain = d.explain ?? {};
   const explainOk = explainComplete(explain);
 
   const toggleOption = (value: string) => {
     if (readOnly || setupLocked) return;
+    if (moduleId === 4 && value === "tanpa") return;
     const next = selected.includes(value)
       ? selected.filter((v) => v !== value)
       : [...selected, value];
@@ -258,7 +283,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             : moduleId === 3
               ? `Persiapan — tentukan minimal ${cfg.minSelections} suhu`
             : moduleId === 4
-              ? "Persiapan — empat kondisi pembanding"
+              ? `Persiapan — kontrol wajib + pilih minimal ${cfg.minSelections} katalis`
             : `Setup Eksperimen — pilih minimal ${cfg.minSelections} ${cfg.paramName.toLowerCase()}`
         }
         state={stepState(true, setupLocked)}
@@ -298,7 +323,11 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
         ) : moduleId === 4 ? (
           <M4ExperimentSetup
             options={cfg.options}
+            selected={requiredRunValues}
             locked={setupLocked}
+            readOnly={readOnly}
+            minSelections={cfg.minSelections}
+            onToggle={toggleOption}
           />
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -327,7 +356,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <Button
               size="sm"
-              disabled={requiredRunValues.length < cfg.minSelections}
+              disabled={!hasMinimumSelections}
               onClick={() =>
                 updateDraft(sec.id, {
                   selected: requiredRunValues,
@@ -340,7 +369,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
             </Button>
             <span className="text-xs text-slate-400">
               {moduleId === 4
-                ? `${requiredRunValues.length} kondisi akan disiapkan`
+                ? `${selectedCatalystValues.length}/${cfg.minSelections} minimal katalis dipilih · kontrol tanpa katalis wajib`
                 : `${requiredRunValues.length}/${cfg.minSelections} minimal dipilih`}
             </span>
           </div>
@@ -429,10 +458,17 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
       {/* C. Data + graphs (+ module-specific inline visuals) */}
       <SubStep
         n="C"
-        title="Data Percobaan & Grafik (otomatis)"
-        state={stepState(doneRuns.length > 0, allRunsDone)}
+        title="Data Percobaan, Perhitungan Laju & Grafik"
+        state={stepState(doneRuns.length > 0, allDataEntered)}
       >
-        <DataPanel cfg={cfg} runs={runs} />
+        <DataPanel
+          cfg={cfg}
+          runs={runs}
+          readOnly={readOnly}
+          showReactionOrder={moduleId === 1}
+          onRateChange={updateRunRate}
+          onReactionOrderChange={updateRunReactionOrder}
+        />
         {cfg.kind === "temperature" && (
           <div className="mt-4">
             <MaxwellBoltzmann cfg={cfg} runs={runs} />
@@ -449,13 +485,15 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
       <SubStep
         n="D"
         title="Representasi Simbolik — Persamaan Reaksi & Laju"
-        state={stepState(allRunsDone, symbolicOk)}
+        state={stepState(allDataEntered, symbolicOk)}
       >
         <SymbolicPanel
           cfg={cfg}
           answer={d.symbolicAnswer ?? ""}
           ok={symbolicOk}
           readOnly={readOnly}
+          scaffoldingEnabled={scaffoldingEnabled}
+          acceptedProducts={customScaffoldTerms(scaffoldTerms, "symbolic_product")}
           onChange={(v) => updateDraft(sec.id, { symbolicAnswer: v })}
           onValidated={(ok) => updateDraft(sec.id, { symbolicOk: ok })}
         />
@@ -477,7 +515,9 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
       {!readOnly && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
           <Button
-            disabled={!(setupLocked && allRunsDone && symbolicOk && explainOk)}
+            disabled={
+              !(setupLocked && allRunsDone && allDataEntered && symbolicOk && explainOk)
+            }
             loading={busy}
             onClick={async () => {
               setBusy(true);
@@ -492,7 +532,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
           >
             Selesaikan Bagian Eksperimen
           </Button>
-          {!(setupLocked && allRunsDone && symbolicOk && explainOk) && (
+          {!(setupLocked && allRunsDone && allDataEntered && symbolicOk && explainOk) && (
             <p className="text-xs text-slate-400">
               Lengkapi langkah A–E untuk menyelesaikan bagian ini.
             </p>

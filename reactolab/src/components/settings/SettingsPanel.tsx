@@ -316,6 +316,12 @@ export default function SettingsPanel({ showReset = false }: { showReset?: boole
           Progres, jawaban, dan data eksperimen <b>{selectedModule?.title}</b> akan
           dihapus. Progres modul lainnya tetap dipertahankan.
         </p>
+        {selectedModuleId && selectedModuleId <= 6 && (
+          <p className="mt-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">
+            Modul 7 (Penutup) akan dikunci kembali dan baru tersedia setelah Modul
+            1–6 kembali berstatus selesai seluruhnya.
+          </p>
+        )}
         {selectedModuleId && selectedModuleId <= 4 && (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
             Snapshot LKPD lama akan dibatalkan dan dibuat ulang setelah Modul 1–4

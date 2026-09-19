@@ -9,7 +9,6 @@ import {
   BookOpen,
   Clapperboard,
   ClipboardList,
-  FlaskConical,
   History,
   KeyRound,
   LayoutDashboard,
@@ -17,6 +16,7 @@ import {
   Menu,
   MessagesSquare,
   MonitorCheck,
+  SlidersHorizontal,
   Settings,
   Users,
   X,
@@ -24,6 +24,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/misc";
+import BrandLogo from "@/components/layout/BrandLogo";
 import type { Role } from "@/lib/types";
 
 interface NavItem {
@@ -48,6 +49,11 @@ const NAV: Record<Role, NavItem[]> = {
       label: "Video Orientasi",
       icon: Clapperboard,
     },
+    {
+      href: "/teacher/scaffolding",
+      label: "Scaffolding",
+      icon: SlidersHorizontal,
+    },
     { href: "/teacher/monitoring", label: "Monitoring Siswa", icon: MonitorCheck },
     { href: "/teacher/discussion", label: "Forum Diskusi", icon: MessagesSquare },
     { href: "/teacher/settings", label: "Settings", icon: Settings },
@@ -59,6 +65,11 @@ const NAV: Record<Role, NavItem[]> = {
       href: "/admin/password-reset-requests",
       label: "Permintaan Reset Password",
       icon: KeyRound,
+    },
+    {
+      href: "/admin/scaffolds",
+      label: "Pengaturan Scaffolding",
+      icon: SlidersHorizontal,
     },
     { href: "/admin/audit", label: "Audit Log", icon: History },
     { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -100,10 +111,17 @@ function isNavItemActive(pathname: string | null, href: string): boolean {
     );
   }
 
+  if (href === "/teacher/scaffolding") {
+    return (
+      pathname.startsWith("/teacher/scaffolding/") ||
+      /\/teacher\/classes\/[^/]+\/scaffolding(\/.*)?$/.test(pathname)
+    );
+  }
+
   // Kelas should NOT be active when viewing a feature under a class.
   if (href === "/teacher/classes") {
     if (
-      /\/teacher\/classes\/[^/]+\/(monitoring|discussion|practice)(\/.*)?$/.test(pathname)
+      /\/teacher\/classes\/[^/]+\/(monitoring|discussion|practice|scaffolding)(\/.*)?$/.test(pathname)
     ) {
       return false;
     }
@@ -131,18 +149,12 @@ export default function AppShell({
     <div className="flex flex-col h-full">
       <Link
         href={`/${role}/dashboard`}
-        className="flex items-center gap-2.5 px-5 h-16 border-b border-slate-100"
+        className="flex h-16 items-center gap-3 border-b border-slate-100 px-4"
+        aria-label={`ChemSpace - Dashboard ${ROLE_LABEL[role]}`}
       >
-        <span className="h-9 w-9 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-sm">
-          <FlaskConical className="h-5 w-5" />
-        </span>
-        <span>
-          <span className="block font-black text-slate-900 leading-none">
-            Reacto<span className="text-brand-600">Lab</span>
-          </span>
-          <span className="block text-[11px] text-slate-400 font-medium mt-0.5">
-            Laju Reaksi · {ROLE_LABEL[role]}
-          </span>
+        <BrandLogo className="h-10 w-auto min-w-0" priority />
+        <span className="ml-auto shrink-0 rounded-full bg-brand-50 px-2 py-1 text-[10px] font-bold text-brand-700">
+          {ROLE_LABEL[role]}
         </span>
       </Link>
 
@@ -232,9 +244,12 @@ export default function AppShell({
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="font-black text-slate-900">
-          Reacto<span className="text-brand-600">Lab</span>
-        </span>
+        <Link
+          href={`/${role}/dashboard`}
+          aria-label={`ChemSpace - Dashboard ${ROLE_LABEL[role]}`}
+        >
+          <BrandLogo className="h-9 w-auto" priority />
+        </Link>
       </header>
 
       <main className="lg:pl-64">

@@ -18,6 +18,8 @@ const ACTION_LABEL: Record<string, { label: string; tone: "blue" | "green" | "re
   activate_user: { label: "Aktifkan", tone: "green" },
   delete_user: { label: "Hapus akun", tone: "red" },
   reset_password: { label: "Reset password", tone: "amber" },
+  add_scaffold_term: { label: "Tambah toleransi", tone: "green" },
+  delete_scaffold_term: { label: "Hapus toleransi", tone: "red" },
   seed_admin: { label: "Seed akun", tone: "slate" },
 };
 

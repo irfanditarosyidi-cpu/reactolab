@@ -1,4 +1,4 @@
-// ===== ReactoLab shared types (mirrors PRD v1.2 §28 data model) =====
+// ===== ChemSpace shared types (mirrors PRD v1.2 §28 data model) =====
 
 export type Role = "student" | "teacher" | "admin";
 export type UserStatus = "active" | "inactive";
@@ -50,6 +50,11 @@ export interface OrientationMedia {
   updatedAt: number;
 }
 
+export interface ScaffoldSettings {
+  enabled: boolean;
+  updatedAt: number;
+}
+
 export interface ClassInfo {
   classId?: string;
   className: string;
@@ -75,6 +80,10 @@ export interface ExperimentRun {
   series?: { t: number; v: number }[]; // e.g. gas volume over time
   rate: number; // computed rate value
   rateLabel: string; // e.g. "0.056 s⁻¹"
+  /** Rate calculated and entered by the student; used by the rate chart. */
+  studentRate?: number;
+  /** Reaction order calculated and entered by the student (Module 1). */
+  studentReactionOrder?: number;
   at: number;
 }
 

@@ -5,20 +5,8 @@
 import Button from "@/components/ui/Button";
 import { Help, Input, Label, Textarea } from "@/components/ui/forms";
 import type { ExperimentConfig } from "@/lib/module-defs";
+import { matchesSymbolicTerms } from "@/lib/scaffold-config";
 import { useState } from "react";
-
-const SUBSCRIPTS: Record<string, string> = {
-  "₀": "0",
-  "₁": "1",
-  "₂": "2",
-  "₃": "3",
-  "₄": "4",
-  "₅": "5",
-  "₆": "6",
-  "₇": "7",
-  "₈": "8",
-  "₉": "9",
-};
 
 const DIGIT_SUBSCRIPTS: Record<string, string> = {
   "0": "₀",
@@ -46,17 +34,39 @@ export function formatChemicalSubscripts(value: string): string {
   });
 }
 
-function normalizeFragments(answer: string): string[] {
-  let s = answer.toLowerCase();
-  for (const [sub, digit] of Object.entries(SUBSCRIPTS)) {
-    s = s.split(sub).join(digit);
-  }
-  return s.split(/[^a-z0-9]+/).filter(Boolean);
+export function checkSymbolic(
+  cfg: ExperimentConfig,
+  answer: string,
+  acceptedProducts: string[] = []
+): boolean {
+  return matchesSymbolicTerms(answer, [
+    ...cfg.symbolicTokens,
+    ...acceptedProducts,
+  ]);
 }
 
-export function checkSymbolic(cfg: ExperimentConfig, answer: string): boolean {
-  const frags = normalizeFragments(answer);
-  return cfg.symbolicTokens.every((tok) => frags.includes(tok));
+const SYMBOLIC_HINTS: Record<ExperimentConfig["kind"], string[]> = {
+  concentration: [
+    "Cermati kembali jenis atom pada sisi pereaksi. Atom-atom tersebut tetap harus ditemukan pada zat hasil reaksi.",
+    "Hubungkan gelembung yang terlihat dan larutan baru yang terbentuk dengan kemungkinan jenis produknya.",
+  ],
+  surface: [
+    "Cermati kembali jenis atom pada zat pereaksi dan pastikan tidak ada atom yang hilang pada zat hasil.",
+    "Hubungkan gas yang tertampung serta perubahan larutan dengan ciri umum reaksi asam dan karbonat.",
+  ],
+  temperature: [
+    "Gunakan gejala percobaan sebagai petunjuk untuk menentukan jenis zat hasil reaksi.",
+    "Hubungkan kekeruhan dan gas yang terbentuk dengan wujud produk yang mungkin dihasilkan.",
+  ],
+  catalyst: [
+    "Perhatikan bahwa penguraian memecah satu senyawa menjadi zat-zat yang lebih sederhana.",
+    "Gunakan gelembung gas pada percobaan dan atom penyusun pereaksi sebagai petunjuk.",
+  ],
+};
+
+function symbolicHint(cfg: ExperimentConfig, attempts: number): string {
+  const hints = SYMBOLIC_HINTS[cfg.kind];
+  return hints[Math.min(Math.max(attempts - 1, 0), hints.length - 1)];
 }
 
 export function SymbolicPanel({
@@ -64,6 +74,8 @@ export function SymbolicPanel({
   answer,
   ok,
   readOnly,
+  scaffoldingEnabled,
+  acceptedProducts = [],
   onChange,
   onValidated,
 }: {
@@ -71,15 +83,18 @@ export function SymbolicPanel({
   answer: string;
   ok: boolean;
   readOnly: boolean;
+  scaffoldingEnabled: boolean;
+  acceptedProducts?: string[];
   onChange: (v: string) => void;
   onValidated: (ok: boolean) => void;
 }) {
   const [attempts, setAttempts] = useState(0);
-  const [feedback, setFeedback] = useState<"" | "wrong" | "right">(ok ? "right" : "");
+  const [feedback, setFeedback] = useState<"" | "wrong">("");
 
   const verify = () => {
-    const good = checkSymbolic(cfg, answer);
-    setFeedback(good ? "right" : "wrong");
+    const good =
+      !scaffoldingEnabled || checkSymbolic(cfg, answer, acceptedProducts);
+    setFeedback(good ? "" : "wrong");
     if (!good) setAttempts((a) => a + 1);
     onValidated(good);
   };
@@ -103,41 +118,19 @@ export function SymbolicPanel({
         {!ok && !readOnly && (
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" onClick={verify} disabled={answer.trim().length < 2}>
-              Periksa
+              {scaffoldingEnabled ? "Periksa" : "Lanjutkan"}
             </Button>
-            {attempts >= 2 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  onChange(cfg.symbolicSolution);
-                  onValidated(true);
-                  setFeedback("right");
-                }}
-              >
-                Lihat &amp; Gunakan Jawaban
-              </Button>
-            )}
           </div>
         )}
-        {feedback === "wrong" && (
-          <p className="mt-2 text-sm text-red-600">
-            Belum tepat — periksa kembali rumus kimia hasil reaksi. ({attempts}×
-            percobaan)
-          </p>
-        )}
-        {(ok || feedback === "right") && (
-          <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-            <p className="text-sm font-bold text-emerald-800 font-mono">
-              ✔ {cfg.reaction}
+        {scaffoldingEnabled && feedback === "wrong" && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="text-sm font-semibold text-amber-900">Petunjuk:</p>
+            <p className="mt-0.5 text-sm text-amber-800">
+              {symbolicHint(cfg, attempts)}
             </p>
           </div>
         )}
       </div>
-      <Help>
-        Perhitungan laju ({cfg.rateLabel}) pada tabel data dihitung otomatis dari hasil
-        percobaanmu.
-      </Help>
     </div>
   );
 }

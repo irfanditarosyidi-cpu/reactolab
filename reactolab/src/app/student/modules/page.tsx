@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/misc";
+import { ReactionRatePrompt } from "@/components/student/LearningMissionMap";
 import ModuleGrid from "@/components/student/ModuleGrid";
 import { useAuth } from "@/lib/auth-context";
 import { listen, listenMyGrades } from "@/lib/db";
@@ -54,7 +55,15 @@ export default function StudentModulesPage() {
       ) : !loaded ? (
         <Spinner label="Memuat progres…" />
       ) : (
-        <ModuleGrid progress={progress} grades={grades} />
+        <div className="space-y-6">
+          <ReactionRatePrompt />
+          <div>
+            <h2 className="mb-3 text-lg font-black text-slate-900">
+              Daftar Modul
+            </h2>
+            <ModuleGrid progress={progress} grades={grades} />
+          </div>
+        </div>
       )}
     </div>
   );

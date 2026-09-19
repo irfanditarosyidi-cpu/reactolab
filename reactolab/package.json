@@ -1,8 +1,8 @@
 {
-  "name": "reactolab",
+  "name": "chemspace",
   "version": "1.2.0",
   "private": true,
-  "description": "ReactoLab — Web Pembelajaran Laju Reaksi Berbasis Inkuiri Terbimbing",
+  "description": "ChemSpace — Web Pembelajaran Laju Reaksi Berbasis Inkuiri Terbimbing",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

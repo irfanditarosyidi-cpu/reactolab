@@ -20,7 +20,13 @@ export function runDuration(cfg: ExperimentConfig, factor: number): number {
       return round1(18 / factor); // Mg strip fully dissolved
     case "temperature":
       return round1(24 * Math.pow(2, (30 - factor) / 20)); // X mark disappears
-    case "surface":
+    case "surface": {
+      // Equal CaCO₃ mass produces equal final CO₂ volume. Surface area changes
+      // only how long the reaction needs to reach that same final volume.
+      const sampleEvery = cfg.gas?.sampleEvery ?? 10;
+      const slowestDuration = cfg.gas?.duration ?? 200;
+      return Math.ceil(slowestDuration / Math.max(factor, 0.1) / sampleEvery) * sampleEvery;
+    }
     case "catalyst":
       return cfg.gas?.duration ?? 40; // fixed observation window
   }
@@ -29,7 +35,14 @@ export function runDuration(cfg: ExperimentConfig, factor: number): number {
 /** Gas volume produced at simulated time t (surface & catalyst experiments). */
 export function volumeAt(cfg: ExperimentConfig, factor: number, t: number): number {
   const vmax = cfg.gas?.vmax ?? 50;
-  const k = cfg.kind === "surface" ? 0.02 * factor : 0.012 * factor;
+  if (cfg.kind === "surface") {
+    const duration = runDuration(cfg, factor);
+    const progress = Math.min(1, Math.max(0, t / duration));
+    // Ease-out curve: gas is produced rapidly at first, then slows as the
+    // reactants are consumed, reaching exactly the same Vmax at completion.
+    return vmax * (1 - Math.pow(1 - progress, 2));
+  }
+  const k = 0.012 * factor;
   return vmax * (1 - Math.exp(-k * t));
 }
 
@@ -38,7 +51,10 @@ export function buildSeries(
   factor: number
 ): { t: number; v: number }[] {
   const every = cfg.gas?.sampleEvery ?? 2;
-  const dur = cfg.gas?.duration ?? 40;
+  const dur =
+    cfg.kind === "surface"
+      ? runDuration(cfg, factor)
+      : (cfg.gas?.duration ?? 40);
   const out: { t: number; v: number }[] = [];
   for (let t = 0; t <= dur; t += every) {
     out.push({ t, v: Math.round(volumeAt(cfg, factor, t) * 10) / 10 });

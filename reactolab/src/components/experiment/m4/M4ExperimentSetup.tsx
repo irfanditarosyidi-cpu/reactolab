@@ -13,11 +13,21 @@ const styles: Record<string, { color: string; sample: string; note: string }> = 
 
 export default function M4ExperimentSetup({
   options,
+  selected,
   locked,
+  readOnly,
+  minSelections,
+  onToggle,
 }: {
   options: ExperimentConfig["options"];
+  selected: string[];
   locked: boolean;
+  readOnly: boolean;
+  minSelections: number;
+  onToggle: (value: string) => void;
 }) {
+  const selectedCatalystCount = selected.filter((value) => value !== "tanpa").length;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
@@ -36,23 +46,64 @@ export default function M4ExperimentSetup({
       </div>
 
       <div>
-        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Empat kondisi pembanding yang akan diuji</p>
+        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          Kontrol wajib dan pilihan katalis yang akan diuji
+        </p>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {options.map((option) => {
             const meta = styles[option.value] ?? styles.tanpa;
+            const isControl = option.value === "tanpa";
+            const isSelected = isControl || selected.includes(option.value);
             return (
-              <div key={option.value} className="relative min-h-[142px] overflow-hidden rounded-2xl border border-blue-200 bg-blue-50 p-3 text-left shadow-sm ring-1 ring-blue-100">
-                <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-blue-600 text-white">{locked ? <Lock className="h-3 w-3" /> : <Check className="h-3.5 w-3.5" />}</span>
+              <button
+                key={option.value}
+                type="button"
+                disabled={isControl || locked || readOnly}
+                aria-pressed={isSelected}
+                onClick={() => onToggle(option.value)}
+                className={cn(
+                  "relative min-h-[142px] overflow-hidden rounded-2xl border p-3 text-left shadow-sm transition disabled:cursor-not-allowed",
+                  isSelected
+                    ? "border-blue-300 bg-blue-50 ring-1 ring-blue-100"
+                    : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute right-2 top-2 grid min-h-6 min-w-6 place-items-center rounded-full px-1.5 text-white",
+                    isSelected ? "bg-blue-600" : "bg-slate-300",
+                  )}
+                >
+                  {isControl || locked ? (
+                    <Lock className="h-3 w-3" />
+                  ) : isSelected ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <span className="text-[9px] font-black">Pilih</span>
+                  )}
+                </span>
                 <span className="mx-auto mt-2 block h-16 w-12 rounded-b-xl rounded-t-md border-2 border-slate-300 bg-white p-1 shadow-inner"><i className={cn("mt-6 block h-7 rounded-b-lg", meta.color)} /></span>
                 <span className="mt-2 block text-center text-sm font-black text-slate-800">{option.label}</span>
                 <span className="block text-center text-[9px] font-bold text-slate-400">{meta.sample} · {meta.note}</span>
-              </div>
+              </button>
             );
           })}
         </div>
+        <p className="mt-2 text-xs font-bold text-blue-700">
+          {selectedCatalystCount}/{minSelections} minimal katalis dipilih
+        </p>
       </div>
 
-      <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900"><b>Variabel kontrol:</b> volume dan konsentrasi H₂O₂, massa/volume katalis, suhu, serta ukuran labu dibuat sama.</p>
+      <div className="space-y-2">
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+          <b>Kontrol pembanding:</b> kondisi tanpa katalis wajib diuji agar pengaruh
+          katalis dapat dibandingkan dengan reaksi penguraian H₂O₂ tanpa katalis.
+        </p>
+        <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-900">
+          <b>Variabel kontrol:</b> volume dan konsentrasi H₂O₂, massa/volume katalis,
+          suhu, serta ukuran labu dibuat sama.
+        </p>
+      </div>
     </div>
   );
 }

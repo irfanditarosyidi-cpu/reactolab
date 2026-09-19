@@ -1,4 +1,4 @@
-// ===== ReactoLab module & learning-content definitions (PRD §16–§25) =====
+// ===== ChemSpace module & learning-content definitions (PRD §16–§25) =====
 // Every student module is ONE single page composed of sequential sections.
 
 export type SectionType =
@@ -42,7 +42,7 @@ export interface ExperimentConfig {
   reaction: string; // full balanced equation for display after validation
   reactionLeft: string; // left side shown as the prompt
   symbolicPrompt: string;
-  symbolicTokens: string[]; // tokens that must appear in the student's answer
+  symbolicTokens: string[]; // accepted product tokens; at least one must appear
   symbolicSolution: string; // right side solution
   rateKind: "inverseTime" | "gasRate";
   rateLabel: string;
@@ -135,7 +135,7 @@ export const MODULES: ModuleDef[] = [
       reaction: "Mg(s) + 2HCl(aq) → MgCl₂(aq) + H₂(g)",
       reactionLeft: "Mg(s) + 2HCl(aq) →",
       symbolicPrompt:
-        "Lengkapi persamaan reaksi berikut dengan menuliskan zat-zat hasil reaksinya.",
+        "Tuliskan zat hasil reaksi (produk) pada persamaan berikut.",
       symbolicTokens: ["mgcl2", "h2"],
       symbolicSolution: "MgCl₂(aq) + H₂(g)",
       rateKind: "inverseTime",
@@ -189,17 +189,16 @@ export const MODULES: ModuleDef[] = [
       reaction: "CaCO₃(s) + 2HCl(aq) → CaCl₂(aq) + H₂O(l) + CO₂(g)",
       reactionLeft: "CaCO₃(s) + 2HCl(aq) →",
       symbolicPrompt:
-        "Lengkapi persamaan reaksi berikut dengan menuliskan zat-zat hasil reaksinya.",
+        "Tuliskan zat hasil reaksi (produk) pada persamaan berikut.",
       symbolicTokens: ["cacl2", "h2o", "co2"],
       symbolicSolution: "CaCl₂(aq) + H₂O(l) + CO₂(g)",
       rateKind: "gasRate",
       rateLabel: "v = ΔV/Δt",
       rateUnit: "mL/s",
       timeLabel: "Volume gas CO₂ (mL)",
-      // sampleEvery = interval pencatatan otomatis (s simulasi); duration = batas
-      // maksimum pengamatan — reaksi dinyatakan selesai lebih awal saat volume
-      // gas berhenti bertambah (berbeda untuk tiap bentuk).
-      gas: { vmax: 48, sampleEvery: 10, duration: 300 },
+      // Semua bentuk menghasilkan volume akhir CO₂ yang sama. `duration` adalah
+      // waktu bentuk paling lambat; bentuk lain selesai lebih cepat sesuai faktor.
+      gas: { vmax: 48, sampleEvery: 10, duration: 200 },
       chartX: "Bentuk CaCO₃",
       numericParam: false,
       stageNote:
@@ -248,8 +247,8 @@ export const MODULES: ModuleDef[] = [
         "Na₂S₂O₃(aq) + 2HCl(aq) → 2NaCl(aq) + S(s) + SO₂(g) + H₂O(l)",
       reactionLeft: "Na₂S₂O₃(aq) + 2HCl(aq) →",
       symbolicPrompt:
-        "Lengkapi persamaan reaksi berikut dengan menuliskan zat-zat hasil reaksinya (endapan belerang membuat larutan keruh).",
-      symbolicTokens: ["nacl", "so2", "h2o"],
+        "Tuliskan zat hasil reaksi (produk) pada persamaan berikut (endapan belerang membuat larutan keruh).",
+      symbolicTokens: ["nacl", "s", "so2", "h2o"],
       symbolicSolution: "2NaCl(aq) + S(s) + SO₂(g) + H₂O(l)",
       rateKind: "inverseTime",
       rateLabel: "v = 1/t",
@@ -292,7 +291,8 @@ export const MODULES: ModuleDef[] = [
       kind: "catalyst",
       title: "Penguraian H₂O₂ dengan Berbagai Katalis",
       paramName: "Kondisi / Katalis",
-      minSelections: 4,
+      // Students choose at least two catalysts; the no-catalyst control is mandatory.
+      minSelections: 2,
       options: [
         { value: "tanpa", label: "Tanpa Katalis", factor: 0.35 },
         { value: "mno2", label: "MnO₂", factor: 6 },
@@ -302,7 +302,7 @@ export const MODULES: ModuleDef[] = [
       reaction: "2H₂O₂(aq) → 2H₂O(l) + O₂(g)",
       reactionLeft: "2H₂O₂(aq) →",
       symbolicPrompt:
-        "Lengkapi persamaan reaksi penguraian H₂O₂ berikut dengan menuliskan zat-zat hasil reaksinya.",
+        "Tuliskan zat hasil reaksi (produk) pada persamaan penguraian H₂O₂ berikut.",
       symbolicTokens: ["h2o", "o2"],
       symbolicSolution: "2H₂O(l) + O₂(g)",
       rateKind: "gasRate",

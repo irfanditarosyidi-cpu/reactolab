@@ -16,7 +16,12 @@ import {
 import { db } from "./firebase/client";
 import { P } from "./paths";
 import { getModuleDef } from "./module-defs";
-import { buildProgressSkeleton, overallPercent } from "./progress";
+import {
+  buildProgressSkeleton,
+  CLOSING_MODULE_ID,
+  lockedModuleProgress,
+  overallPercent,
+} from "./progress";
 import { generateClassCode } from "./utils";
 import type {
   ClassInfo,
@@ -231,6 +236,20 @@ export async function resetStudentModuleData(
   const resetSections = Object.fromEntries(
     def.sections.map((section) => [section.id, { status: "locked" as const }])
   );
+  const nextModules = {
+    ...progress.modules,
+    [String(moduleId)]: {
+      status: "unlocked" as const,
+      currentSection: null,
+      completionPercent: 0,
+      sections: resetSections,
+    },
+  };
+  if (moduleId >= 1 && moduleId <= 6) {
+    nextModules[String(CLOSING_MODULE_ID)] = lockedModuleProgress(
+      CLOSING_MODULE_ID
+    );
+  }
   const nextProgress: StudentProgress = {
     ...progress,
     currentModule: moduleId,
@@ -238,15 +257,7 @@ export async function resetStudentModuleData(
     courseCompletedAt: null,
     lastActivityAt: now,
     lastSavedAt: now,
-    modules: {
-      ...progress.modules,
-      [String(moduleId)]: {
-        status: "unlocked",
-        currentSection: null,
-        completionPercent: 0,
-        sections: resetSections,
-      },
-    },
+    modules: nextModules,
   };
 
   // A reset in the inquiry modules invalidates the old combined LKPD snapshot.
@@ -261,6 +272,9 @@ export async function resetStudentModuleData(
   };
   if (moduleId >= 1 && moduleId <= 4) updates[P.lkpd(classId, uid)] = null;
   if (moduleId === 6) updates[P.discussionProgress(classId, uid)] = null;
+  if (moduleId >= 1 && moduleId <= 6) {
+    updates[P.moduleResponses(classId, uid, CLOSING_MODULE_ID)] = null;
+  }
 
   await updatePaths(updates);
   return nextProgress;

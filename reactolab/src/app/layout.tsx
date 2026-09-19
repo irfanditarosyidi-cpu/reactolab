@@ -4,9 +4,26 @@ import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export const metadata: Metadata = {
-  title: "ReactoLab — Laboratorium Virtual Laju Reaksi",
+  applicationName: "ChemSpace",
+  title: "ChemSpace — Laboratorium Virtual Laju Reaksi",
   description:
     "Web pembelajaran kimia laju reaksi berbasis inkuiri terbimbing: eksperimen virtual, representasi makroskopik-submikroskopik-simbolik, dan forum diskusi ilmiah.",
+  icons: {
+    icon: [
+      {
+        url: "/images/brand/chemspace-favicon.png",
+        type: "image/png",
+        sizes: "64x64",
+      },
+    ],
+    apple: [
+      {
+        url: "/images/brand/chemspace-mark.png",
+        type: "image/png",
+        sizes: "512x512",
+      },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

@@ -41,7 +41,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      title="Masuk ke ReactoLab"
+      title="Masuk ke ChemSpace"
       subtitle="Gunakan akun email dan password kamu."
       footer={
         <span>

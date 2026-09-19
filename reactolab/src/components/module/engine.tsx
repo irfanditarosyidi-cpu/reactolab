@@ -13,9 +13,10 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { get, ref, set, update } from "firebase/database";
+import { get, onValue, ref, set, update } from "firebase/database";
 import { db } from "@/lib/firebase/client";
 import { P } from "@/lib/paths";
+import type { ScaffoldModuleConfig } from "@/lib/scaffold-config";
 import {
   MODULES,
   getModuleDef,
@@ -24,6 +25,8 @@ import {
 } from "@/lib/module-defs";
 import {
   buildProgressSkeleton,
+  CLOSING_MODULE_ID,
+  closingPrerequisitesComplete,
   moduleCompletionPercent,
   normalizeProgress,
   overallPercent,
@@ -34,6 +37,7 @@ import type {
   ModuleProgress,
   OrientationMedia,
   SaveState,
+  ScaffoldSettings,
   StudentProgress,
 } from "@/lib/types";
 
@@ -49,6 +53,8 @@ export interface EngineCtx {
   modProgress: ModuleProgress;
   drafts: DraftMap;
   runs: Record<string, ExperimentRun>;
+  scaffoldTerms: ScaffoldModuleConfig;
+  scaffoldingEnabled: boolean;
   orientationMedia: OrientationMedia | null;
   saveState: SaveState;
   readOnlyAcademic: boolean;
@@ -60,6 +66,8 @@ export interface EngineCtx {
     finalPatch?: Record<string, unknown>
   ) => Promise<void>;
   recordRun: (run: ExperimentRun) => Promise<void>;
+  updateRunRate: (paramValue: string, rate: number | null) => void;
+  updateRunReactionOrder: (paramValue: string, order: number | null) => void;
   resetExperiment: () => Promise<void>;
   saveAndExit: () => Promise<void>;
   goToModule: (id: number) => void;
@@ -86,6 +94,8 @@ interface LoadedState {
   progress: StudentProgress;
   drafts: DraftMap;
   runs: Record<string, ExperimentRun>;
+  scaffoldTerms: ScaffoldModuleConfig;
+  scaffoldingEnabled: boolean;
   orientationMedia: OrientationMedia | null;
 }
 
@@ -143,10 +153,18 @@ export function ModuleEngineProvider({
         return;
       }
 
-      const [respSnap, runsSnap, orientationMediaSnap] = await Promise.all([
+      const [
+        respSnap,
+        runsSnap,
+        orientationMediaSnap,
+        scaffoldSnap,
+        scaffoldSettingsSnap,
+      ] = await Promise.all([
         get(ref(db, P.moduleResponses(classId, uid, moduleId))),
         get(ref(db, P.expRuns(classId, uid, moduleId))),
         get(ref(db, P.orientationMedia(classId, moduleId))),
+        get(ref(db, P.scaffoldModule(moduleId))).catch(() => null),
+        get(ref(db, P.scaffoldSetting(classId))).catch(() => null),
       ]);
       const drafts: DraftMap = respSnap.exists()
         ? (respSnap.val() as DraftMap)
@@ -157,6 +175,12 @@ export function ModuleEngineProvider({
       const orientationMedia = orientationMediaSnap.exists()
         ? (orientationMediaSnap.val() as OrientationMedia)
         : null;
+      const scaffoldTerms = scaffoldSnap?.exists()
+        ? (scaffoldSnap.val() as ScaffoldModuleConfig)
+        : {};
+      const scaffoldingEnabled = scaffoldSettingsSnap?.exists()
+        ? (scaffoldSettingsSnap.val() as ScaffoldSettings).enabled !== false
+        : true;
 
       // opening transitions (unlocked → in_progress, PR-STU-DASH-003)
       const now = Date.now();
@@ -179,7 +203,14 @@ export function ModuleEngineProvider({
       await set(ref(db, P.progress(classId, uid)), p);
 
       if (!cancelled) {
-        setState({ progress: p, drafts, runs, orientationMedia });
+        setState({
+          progress: p,
+          drafts,
+          runs,
+          scaffoldTerms,
+          scaffoldingEnabled,
+          orientationMedia,
+        });
         // Resume scroll: jump to the active section (PR-LEARN-SAVE-003)
         const target = m.currentSection;
         if (target) {
@@ -196,6 +227,23 @@ export function ModuleEngineProvider({
       cancelled = true;
     };
   }, [loading, uid, classId, moduleId]);
+
+  // Apply teacher changes to the currently open student module immediately.
+  useEffect(() => {
+    if (!classId) return;
+    return onValue(
+      ref(db, P.scaffoldSetting(classId)),
+      (snap) => {
+        const enabled = snap.exists()
+          ? (snap.val() as ScaffoldSettings).enabled !== false
+          : true;
+        setState((previous) =>
+          previous ? { ...previous, scaffoldingEnabled: enabled } : previous
+        );
+      },
+      () => undefined
+    );
+  }, [classId]);
 
   // ---------- checkpoint saver ----------
   const flushNow = useCallback(async (): Promise<boolean> => {
@@ -304,8 +352,17 @@ export function ModuleEngineProvider({
         m.currentSection = null;
         p.currentSection = null;
         const nextMod = p.modules[String(moduleId + 1)];
-        if (nextMod && nextMod.status === "locked") {
+        const canUnlockNextModule =
+          moduleId + 1 !== CLOSING_MODULE_ID || closingPrerequisitesComplete(p);
+        if (nextMod && nextMod.status === "locked" && canUnlockNextModule) {
           nextMod.status = "unlocked"; // PR-LEARN-SAVE-004
+        }
+        const closingModule = p.modules[String(CLOSING_MODULE_ID)];
+        if (
+          closingModule?.status === "locked" &&
+          closingPrerequisitesComplete(p)
+        ) {
+          closingModule.status = "unlocked";
         }
         const courseComplete = MODULES.every(
           (module) => p.modules[String(module.id)]?.status === "completed"
@@ -362,6 +419,8 @@ export function ModuleEngineProvider({
           progress: p,
           drafts,
           runs: st.runs,
+          scaffoldTerms: st.scaffoldTerms,
+          scaffoldingEnabled: st.scaffoldingEnabled,
           orientationMedia: st.orientationMedia,
         });
         if (nextId) {
@@ -399,6 +458,51 @@ export function ModuleEngineProvider({
     [classId, uid, moduleId]
   );
 
+  // Student-calculated rates are saved separately from the simulation's
+  // internal reference value. Charts and reports prefer this student value.
+  const updateRunRate = useCallback(
+    (paramValue: string, rate: number | null) => {
+      if (!classId || !uid) return;
+      const key = safeKey(paramValue);
+      setState((prev) => {
+        const current = prev?.runs[key];
+        if (!prev || !current) return prev;
+
+        const nextRun = { ...current };
+        if (rate === null) delete nextRun.studentRate;
+        else nextRun.studentRate = rate;
+
+        queue({
+          [`${P.expRuns(classId, uid, moduleId)}/${key}/studentRate`]: rate,
+        });
+        return { ...prev, runs: { ...prev.runs, [key]: nextRun } };
+      });
+    },
+    [classId, uid, moduleId, queue]
+  );
+
+  // Module 1 reaction orders are student answers stored with each run.
+  const updateRunReactionOrder = useCallback(
+    (paramValue: string, order: number | null) => {
+      if (!classId || !uid) return;
+      const key = safeKey(paramValue);
+      setState((prev) => {
+        const current = prev?.runs[key];
+        if (!prev || !current) return prev;
+
+        const nextRun = { ...current };
+        if (order === null) delete nextRun.studentReactionOrder;
+        else nextRun.studentReactionOrder = order;
+
+        queue({
+          [`${P.expRuns(classId, uid, moduleId)}/${key}/studentReactionOrder`]: order,
+        });
+        return { ...prev, runs: { ...prev.runs, [key]: nextRun } };
+      });
+    },
+    [classId, uid, moduleId, queue]
+  );
+
   // ---------- reset all experiment data for the current module ----------
   const resetExperiment = useCallback(async () => {
     const st = stateRef.current;
@@ -428,6 +532,8 @@ export function ModuleEngineProvider({
         progress,
         drafts,
         runs: {},
+        scaffoldTerms: st.scaffoldTerms,
+        scaffoldingEnabled: st.scaffoldingEnabled,
         orientationMedia: st.orientationMedia,
       });
       setSaveState("saved");
@@ -486,6 +592,8 @@ export function ModuleEngineProvider({
     modProgress,
     drafts: state.drafts,
     runs: state.runs,
+    scaffoldTerms: state.scaffoldTerms,
+    scaffoldingEnabled: state.scaffoldingEnabled,
     orientationMedia: state.orientationMedia,
     saveState,
     readOnlyAcademic,
@@ -494,6 +602,8 @@ export function ModuleEngineProvider({
     retrySave: () => void flushNow(),
     completeSection,
     recordRun,
+    updateRunRate,
+    updateRunReactionOrder,
     resetExperiment,
     saveAndExit,
     goToModule,

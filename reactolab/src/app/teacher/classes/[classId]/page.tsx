@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   MonitorCheck,
   RefreshCw,
+  SlidersHorizontal,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -123,6 +124,11 @@ export default function ClassDetailPage() {
           <Link href={`/teacher/classes/${classId}/practice`} className="flex-1">
             <Button variant="secondary" full>
               <ClipboardList className="h-4 w-4" /> Latihan Soal
+            </Button>
+          </Link>
+          <Link href={`/teacher/classes/${classId}/scaffolding`} className="flex-1">
+            <Button variant="secondary" full>
+              <SlidersHorizontal className="h-4 w-4" /> Scaffolding
             </Button>
           </Link>
         </div>

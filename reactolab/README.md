@@ -1,4 +1,4 @@
-# ReactoLab v1.2 🧪
+# ChemSpace v1.2 🧪
 
 **Web Pembelajaran Laju Reaksi Berbasis Inkuiri Terbimbing** — implementasi penuh PRD v1.2 (Revisi Modul Satu Halaman + Save & Resume).
 
@@ -71,7 +71,7 @@ npm install
 ### 5. Buat akun admin pertama (seed)
 ```bash
 FIREBASE_SERVICE_ACCOUNT_FILE=./serviceAccountKey.json \
-node scripts/seed.mjs --email admin@sekolah.sch.id --password rahasia123 --name "Admin ReactoLab" --role admin
+node scripts/seed.mjs --email admin@sekolah.sch.id --password rahasia123 --name "Admin ChemSpace" --role admin
 ```
 Script yang sama bisa dipakai membuat akun guru: `--role teacher`.
 (Akun siswa cukup lewat halaman **Daftar** di aplikasi.)
@@ -185,4 +185,4 @@ auditLogs/{logId}                (tulis: hanya server)
 
 ---
 
-Dibangun sesuai **PRD ReactoLab v1.2** — 29 Agustus 2026. Selamat mengajar & bereksperimen! 🚀
+Dibangun sesuai **PRD ChemSpace v1.2** — 29 Agustus 2026. Selamat mengajar & bereksperimen! 🚀

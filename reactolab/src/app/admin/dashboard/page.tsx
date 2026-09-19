@@ -63,7 +63,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-black text-slate-900">Dashboard Admin</h1>
-        <p className="text-sm text-slate-500 mt-1">Kelola akun dan keamanan ReactoLab.</p>
+        <p className="text-sm text-slate-500 mt-1">Kelola akun dan keamanan ChemSpace.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -103,13 +103,23 @@ export default function AdminDashboard() {
         </Card>
       )}
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/admin/users">
           <Card className="hover:border-brand-400 transition-colors">
             <CardBody>
               <p className="font-bold text-slate-800">👥 Kelola Pengguna</p>
               <p className="text-sm text-slate-500 mt-1">
                 Cari, buat, nonaktifkan, ubah role student ↔ teacher.
+              </p>
+            </CardBody>
+          </Card>
+        </Link>
+        <Link href="/admin/scaffolds">
+          <Card className="hover:border-brand-400 transition-colors">
+            <CardBody>
+              <p className="font-bold text-slate-800">🧩 Pengaturan Scaffolding</p>
+              <p className="text-sm text-slate-500 mt-1">
+                Tambahkan variasi kata dan frasa yang dapat diterima sistem.
               </p>
             </CardBody>
           </Card>

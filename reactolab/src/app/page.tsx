@@ -26,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { dashboardPathFor, useAuth } from "@/lib/auth-context";
+import BrandLogo from "@/components/layout/BrandLogo";
 
 const ReactionLab3D = dynamic(
   () => import("@/components/landing/ReactionLab3D"),
@@ -125,14 +126,11 @@ export default function LandingPage() {
     <div className="min-h-screen overflow-x-hidden bg-white text-slate-950">
       <header className="sticky top-0 z-50 border-b border-white/70 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="group flex items-center gap-2.5" aria-label="ReactoLab Beranda">
-            <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-600 to-cyan-500 text-white shadow-lg shadow-blue-500/20 transition-transform group-hover:-rotate-3 group-hover:scale-105">
-              <span className="absolute inset-0 bg-white/10 opacity-0 transition-opacity group-hover:opacity-100" />
-              <FlaskConical className="relative h-5 w-5" />
-            </span>
-            <span className="text-xl font-black tracking-tight text-slate-950">
-              Reacto<span className="text-brand-600">Lab</span>
-            </span>
+          <Link href="/" className="group flex items-center gap-2.5" aria-label="ChemSpace Beranda">
+            <BrandLogo
+              className="h-10 w-auto transition-transform duration-300 group-hover:scale-[1.03] sm:h-12"
+              priority
+            />
           </Link>
 
           <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex" aria-label="Navigasi utama">
@@ -174,7 +172,7 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-slate-600 sm:text-lg lg:mx-0">
-                ReactoLab mengubah materi laju reaksi menjadi pengalaman belajar aktif—dari
+                ChemSpace mengubah materi laju reaksi menjadi pengalaman belajar aktif—dari
                 fenomena sehari-hari, eksperimen virtual 3D, analisis data, hingga diskusi
                 ilmiah berbasis bukti.
               </p>
@@ -279,7 +277,7 @@ export default function LandingPage() {
                 </h2>
               </div>
               <p className="max-w-xl text-sm leading-7 text-slate-600 lg:justify-self-end">
-                ReactoLab tidak memberikan jawaban di awal. Siswa diarahkan untuk mengamati,
+                ChemSpace tidak memberikan jawaban di awal. Siswa diarahkan untuk mengamati,
                 memprediksi, mencoba, membaca bukti, lalu membangun kesimpulan sendiri.
               </p>
             </div>
@@ -417,11 +415,12 @@ export default function LandingPage() {
         <div className="mx-auto max-w-7xl px-4 pb-8 pt-14 sm:px-6 lg:px-8">
           <div className="grid gap-10 border-b border-white/10 pb-10 md:grid-cols-[1.4fr_0.8fr_0.8fr]">
             <div>
-              <Link href="/" className="inline-flex items-center gap-2.5">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-cyan-400 text-white">
-                  <FlaskConical className="h-5 w-5" />
-                </span>
-                <span className="text-xl font-black text-white">Reacto<span className="text-cyan-400">Lab</span></span>
+              <Link
+                href="/"
+                className="inline-flex rounded-2xl bg-white px-3 py-1.5 shadow-lg shadow-black/10"
+                aria-label="ChemSpace Beranda"
+              >
+                <BrandLogo className="h-10 w-auto" />
               </Link>
               <p className="mt-4 max-w-md text-sm leading-6 text-slate-400">
                 Media pembelajaran laju reaksi berbasis inkuiri terbimbing dengan eksperimen
@@ -452,7 +451,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-col gap-2 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} ReactoLab. Pembelajaran kimia yang lebih hidup.</p>
+            <p>© {new Date().getFullYear()} ChemSpace. Pembelajaran kimia yang lebih hidup.</p>
             <p>Versi 1.2 · Laju Reaksi · Inkuiri Terbimbing</p>
           </div>
         </div>

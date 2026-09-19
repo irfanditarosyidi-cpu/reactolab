@@ -157,10 +157,11 @@ export function BurningWoodCard() {
   );
 }
 
-function IntroSection({ onStart }: { onStart: () => void }) {
+export function ReactionRatePrompt({ onStart }: { onStart?: () => void }) {
   const [fadingOut, setFadingOut] = useState(false);
 
   const handleStart = () => {
+    if (!onStart) return;
     setFadingOut(true);
     setTimeout(onStart, 350);
   };
@@ -194,9 +195,9 @@ function IntroSection({ onStart }: { onStart: () => void }) {
               Yuk selidiki lewat 4 misi laboratorium!
             </p>
           </div>
-          <Button size="lg" onClick={handleStart} className="shadow-lg px-8">
+          {onStart && <Button size="lg" onClick={handleStart} className="shadow-lg px-8">
             🚀 Mulai Belajar
-          </Button>
+          </Button>}
         </div>
       </div>
     </div>
@@ -628,7 +629,7 @@ export default function LearningMissionMap({
   if (hasStarted === null) return null;
 
   if (!hasStarted) {
-    return <IntroSection onStart={handleStart} />;
+    return <ReactionRatePrompt onStart={handleStart} />;
   }
 
   return <MissionMap progress={progress} uid={uid} />;

@@ -5,8 +5,8 @@
 // Per shape: choose from the dropdown → "Masukkan CaCO₃" → reaction runs on an accelerated
 // clock (TIME_SCALE sim-seconds per real second) → the CO₂ volume is read from
 // the inverted cylinder and sampled automatically every `sampleEvery` sim
-// seconds → sampling stops when the volume stops increasing → the run (series,
-// completion time, rate) is recorded automatically. "Zoom" swaps the stage to
+// seconds → each shape reaches the same final CO₂ volume in a different time →
+// the run (series, completion time, rate) is recorded automatically. "Zoom" swaps the stage to
 // the particle-surface view.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
 import { safeKey } from "@/lib/runs";
-import { volumeAt } from "../sim-models";
+import { runDuration, volumeAt } from "../sim-models";
 import M2Scene3D, { type M2SimShared, type M2Stats } from "./M2Scene3D";
 import M2Tutorial from "./M2Tutorial";
 
@@ -42,7 +42,6 @@ interface Sample {
 
 const TIME_SCALE = 5; // simulated seconds per real second
 const INSERT_MS = 900;
-const COMPLETE_DELTA_ML = 0.2; // "volume stopped increasing" threshold per interval
 
 function fmtMl(v: number): string {
   return v.toFixed(1).replace(".", ",");
@@ -71,7 +70,6 @@ export default function M2SimStage({
   );
   const vmax = cfg.gas?.vmax ?? 48;
   const sampleEvery = cfg.gas?.sampleEvery ?? 10;
-  const maxSimT = cfg.gas?.duration ?? 300;
 
   const [param, setParam] = useState(options[0]?.value ?? "");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -186,14 +184,14 @@ export default function M2SimStage({
       if (phaseRef.current === "reacting") {
         simT = ((now - reactionStartRef.current) / 1000) * TIME_SCALE;
         let v = volumeAt(cfg, factorRef.current, simT);
-        // automatic sampling every `sampleEvery` s until the volume stops rising
+        // Automatic sampling continues until this shape reaches the shared
+        // final CO₂ volume. Each shape has a different completion time.
         while (phaseRef.current === "reacting" && simT >= nextSampleRef.current) {
           const t = nextSampleRef.current;
           const sv = Math.round(volumeAt(cfg, factorRef.current, t) * 10) / 10;
-          const prev = samplesRef.current[samplesRef.current.length - 1];
           samplesRef.current = [...samplesRef.current, { t, v: sv }];
           setSamples(samplesRef.current);
-          if ((prev && sv - prev.v < COMPLETE_DELTA_ML) || t >= maxSimT) {
+          if (t >= runDuration(cfg, factorRef.current)) {
             phaseRef.current = "done";
             v = sv;
             simT = t;
@@ -223,7 +221,7 @@ export default function M2SimStage({
       cancelAnimationFrame(raf);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
     };
-  }, [cfg, finishRun, maxSimT, sampleEvery]);
+  }, [cfg, finishRun, sampleEvery]);
 
   // ---- actions ----
   const selectParam = (value: string) => {

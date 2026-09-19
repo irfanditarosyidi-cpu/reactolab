@@ -168,7 +168,7 @@ function ApparatusCarousel({
   return (
     <section
       className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50"
-      aria-label="Carousel empat rangkaian pengukur gas oksigen"
+      aria-label="Carousel rangkaian pengukur gas oksigen yang dipilih"
       aria-roledescription="carousel"
     >
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -319,6 +319,7 @@ function ApparatusCarousel({
 
 export default function M4SimStage({
   cfg,
+  selected,
   runs,
   readOnly = false,
   onRunDone,
@@ -329,9 +330,8 @@ export default function M4SimStage({
   readOnly?: boolean;
   onRunDone: (run: ExperimentRun) => void;
 }) {
-  // Modul 4 selalu menampilkan keempat kondisi pada carousel agar perbandingan
-  // makroskopik dan submikroskopik menggunakan urutan eksperimen yang sama.
-  const options = cfg.options;
+  // Only the mandatory control and catalysts chosen during setup are tested.
+  const options = cfg.options.filter((option) => selected.includes(option.value));
   const [param, setParam] = useState(options[0]?.value ?? "");
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState(3);

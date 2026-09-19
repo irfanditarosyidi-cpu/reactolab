@@ -143,6 +143,19 @@
       }
     },
 
+    "scaffoldConfigs": {
+      ".read": "auth != null",
+      ".write": false
+    },
+
+    "scaffoldSettings": {
+      "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('classMemberships').child($classId).child(auth.uid).exists() || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && root.child('classes').child($classId).child('teacherId').val() === auth.uid",
+        ".validate": "newData.hasChildren(['enabled', 'updatedAt']) && newData.child('enabled').isBoolean() && newData.child('updatedAt').isNumber()"
+      }
+    },
+
     "passwordResetRequests": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
       "$reqId": {

@@ -1,6 +1,8 @@
 "use client";
 
-// Auto data table + charts built from recorded runs (PRD §30-D/E).
+// Experiment observations plus student-calculated rates and their charts.
+
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Bar,
@@ -14,9 +16,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Input } from "@/components/ui/forms";
 import type { ExperimentConfig } from "@/lib/module-defs";
 import type { ExperimentRun } from "@/lib/types";
-import { runNumericValue, sortRuns } from "@/lib/runs";
+import {
+  buildGasComparisonRows,
+  runNumericValue,
+  sortRuns,
+  studentRateValue,
+} from "@/lib/runs";
 
 export const CHART_COLORS = [
   "#2563eb",
@@ -35,14 +43,83 @@ export function orderedRuns(
   return sortRuns(cfg, runs);
 }
 
+export function parseStudentRate(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function parseStudentReactionOrder(value: string): number | null {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function editableRate(value: number): string {
+  return String(value).replace(".", ",");
+}
+
 export default function DataPanel({
   cfg,
   runs,
+  readOnly,
+  showReactionOrder,
+  onRateChange,
+  onReactionOrderChange,
 }: {
   cfg: ExperimentConfig;
   runs: Record<string, ExperimentRun>;
+  readOnly: boolean;
+  showReactionOrder: boolean;
+  onRateChange: (paramValue: string, rate: number | null) => void;
+  onReactionOrderChange: (paramValue: string, order: number | null) => void;
 }) {
-  const list = orderedRuns(cfg, runs);
+  const list = useMemo(() => orderedRuns(cfg, runs), [cfg, runs]);
+  const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
+  const [orderInputs, setOrderInputs] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setRateInputs((previous) => {
+      const next: Record<string, string> = {};
+      let changed = Object.keys(previous).length !== list.length;
+      for (const run of list) {
+        const storedRate = studentRateValue(run);
+        const fallbackRate = readOnly && Number.isFinite(run.rate) ? run.rate : null;
+        const storedText =
+          storedRate !== null
+            ? editableRate(storedRate)
+            : fallbackRate !== null
+              ? editableRate(fallbackRate)
+              : "";
+        next[run.paramValue] = readOnly
+          ? storedText
+          : (previous[run.paramValue] ?? storedText);
+        if (next[run.paramValue] !== previous[run.paramValue]) changed = true;
+      }
+      return changed ? next : previous;
+    });
+  }, [list, readOnly]);
+
+  useEffect(() => {
+    setOrderInputs((previous) => {
+      const next: Record<string, string> = {};
+      let changed = Object.keys(previous).length !== list.length;
+      for (const run of list) {
+        const storedOrder = Number.isFinite(run.studentReactionOrder)
+          ? run.studentReactionOrder!
+          : null;
+        const storedText = storedOrder === null ? "" : editableRate(storedOrder);
+        next[run.paramValue] = readOnly
+          ? storedText
+          : (previous[run.paramValue] ?? storedText);
+        if (next[run.paramValue] !== previous[run.paramValue]) changed = true;
+      }
+      return changed ? next : previous;
+    });
+  }, [list, readOnly]);
+
   if (list.length === 0) {
     return (
       <p className="text-sm text-slate-400">
@@ -52,30 +129,117 @@ export default function DataPanel({
   }
 
   const isGas = cfg.rateKind === "gasRate";
+  const enteredRateCount = list.filter(
+    (run) => studentRateValue(run) !== null
+  ).length;
+  const enteredOrderCount = list.filter((run) =>
+    Number.isFinite(run.studentReactionOrder)
+  ).length;
 
-  // gas: merge series into one chart dataset
-  let gasRows: Array<Record<string, number>> = [];
-  if (isGas) {
-    const map = new Map<number, Record<string, number>>();
-    for (const r of list) {
-      for (const pt of r.series ?? []) {
-        const row = map.get(pt.t) ?? { t: pt.t };
-        row[r.label] = pt.v;
-        map.set(pt.t, row);
-      }
-    }
-    gasRows = Array.from(map.values()).sort((a, b) => a.t - b.t);
-  }
+  const changeRate = (run: ExperimentRun, rawValue: string) => {
+    if (!/^\d*(?:[.,]\d*)?$/.test(rawValue)) return;
+    setRateInputs((previous) => ({
+      ...previous,
+      [run.paramValue]: rawValue,
+    }));
+    onRateChange(run.paramValue, parseStudentRate(rawValue));
+  };
 
-  const rateRows = list.map((r) => ({
+  const rateField = (run: ExperimentRun) => {
+    const value = rateInputs[run.paramValue] ?? "";
+    const invalid = value.trim().length > 0 && parseStudentRate(value) === null;
+    return (
+      <div className="flex min-w-[150px] items-center gap-2">
+        <Input
+          type="text"
+          inputMode="decimal"
+          value={value}
+          disabled={readOnly}
+          onChange={(event) => changeRate(run, event.target.value)}
+          placeholder="Contoh: 0,025"
+          aria-label={`Laju reaksi untuk ${run.label}`}
+          aria-invalid={invalid}
+          className={invalid ? "border-red-400 focus:border-red-500 focus:ring-red-500" : ""}
+        />
+        <span className="shrink-0 text-xs font-semibold text-slate-500">
+          {cfg.rateUnit}
+        </span>
+      </div>
+    );
+  };
+
+  const changeReactionOrder = (run: ExperimentRun, rawValue: string) => {
+    if (!/^-?\d*(?:[.,]\d*)?$/.test(rawValue)) return;
+    setOrderInputs((previous) => ({
+      ...previous,
+      [run.paramValue]: rawValue,
+    }));
+    onReactionOrderChange(run.paramValue, parseStudentReactionOrder(rawValue));
+  };
+
+  const reactionOrderField = (run: ExperimentRun) => {
+    const value = orderInputs[run.paramValue] ?? "";
+    const invalid =
+      value.trim().length > 0 && parseStudentReactionOrder(value) === null;
+    return (
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={value}
+        disabled={readOnly}
+        onChange={(event) => changeReactionOrder(run, event.target.value)}
+        placeholder="Contoh: 1"
+        aria-label={`Orde reaksi untuk ${run.label}`}
+        aria-invalid={invalid}
+        className={`min-w-[110px] ${
+          invalid ? "border-red-400 focus:border-red-500 focus:ring-red-500" : ""
+        }`}
+      />
+    );
+  };
+
+  const gasRows = isGas ? buildGasComparisonRows(cfg, list) : [];
+
+  const experimentRows = list.map((r) => ({
     name: r.label,
     x: cfg.numericParam ? runNumericValue(cfg, r) : r.label,
     waktu: r.timeSec ?? 0,
-    laju: Number(r.rate.toFixed(4)),
   }));
+  const rateRows = list.flatMap((r) => {
+    const studentRate = studentRateValue(r);
+    const chartRate =
+      studentRate ?? (readOnly && Number.isFinite(r.rate) ? r.rate : null);
+    return chartRate === null
+      ? []
+      : [
+          {
+            name: r.label,
+            x: cfg.numericParam ? runNumericValue(cfg, r) : r.label,
+            laju: chartRate,
+          },
+        ];
+  });
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 sm:px-4">
+        <p className="text-sm font-bold text-blue-900">
+          Hitung dan isi laju reaksi dengan rumus {cfg.rateLabel}.
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-blue-800">
+          {cfg.kind === "surface"
+            ? "Gunakan perubahan volume CO₂ dari 0 hingga 10 detik (V₁₀ ÷ 10 s). Masukkan angka saja; grafik laju menggunakan nilai yang kamu isi."
+            : "Masukkan angka saja (koma atau titik desimal dapat digunakan). Grafik laju reaksi menggunakan nilai yang kamu isi pada tabel."}
+        </p>
+        {!readOnly && (
+          <div className="mt-2 space-y-0.5 text-xs font-bold text-blue-700">
+            <p>{enteredRateCount}/{list.length} nilai laju telah diisi</p>
+            {showReactionOrder && (
+              <p>{enteredOrderCount}/{list.length} nilai orde reaksi telah diisi</p>
+            )}
+          </div>
+        )}
+      </div>
       {/* ---- data table ---- */}
       <div className="grid gap-2 sm:hidden">
         {list.map((r, i) => {
@@ -93,38 +257,35 @@ export default function DataPanel({
                   </p>
                   <p className="truncate text-sm font-black text-slate-800">{r.label}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-black text-brand-700">
-                  {r.rateLabel}
-                </span>
               </div>
               <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
                 {isGas ? (
                   <>
+                    <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                      <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                        {cfg.kind === "surface" ? "Volume (mL)" : "V pada 10 s"}
+                      </dt>
+                      <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
+                        {v10 ?? "—"} mL
+                      </dd>
+                    </div>
                     {cfg.kind !== "surface" && (
                       <div className="rounded-lg bg-slate-50 px-2.5 py-2">
                         <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                          V pada 10 s
+                          V akhir
                         </dt>
                         <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
-                          {v10 ?? "—"} mL
+                          {vEnd ?? "—"} mL
                         </dd>
                       </div>
                     )}
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-2">
-                      <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                        V akhir
-                      </dt>
-                      <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
-                        {vEnd ?? "—"} mL
-                      </dd>
-                    </div>
                     {cfg.kind === "surface" && (
                       <div className="rounded-lg bg-slate-50 px-2.5 py-2">
                         <dt className="text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                          Reaksi selesai pada
+                          Waktu (s)
                         </dt>
                         <dd className="mt-0.5 font-mono font-black tabular-nums text-slate-700">
-                          {r.timeSec !== undefined ? `${r.timeSec} s` : "—"}
+                          10
                         </dd>
                       </div>
                     )}
@@ -139,6 +300,20 @@ export default function DataPanel({
                     </dd>
                   </div>
                 )}
+                <div className="col-span-2 rounded-lg bg-brand-50 px-2.5 py-2">
+                  <dt className="mb-1.5 text-[9px] font-bold uppercase tracking-wide text-brand-700">
+                    Laju {cfg.rateLabel}
+                  </dt>
+                  <dd>{rateField(r)}</dd>
+                </div>
+                {showReactionOrder && (
+                  <div className="col-span-2 rounded-lg bg-violet-50 px-2.5 py-2">
+                    <dt className="mb-1.5 text-[9px] font-bold uppercase tracking-wide text-violet-700">
+                      Orde Reaksi
+                    </dt>
+                    <dd>{reactionOrderField(r)}</dd>
+                  </div>
+                )}
               </dl>
             </article>
           );
@@ -146,21 +321,30 @@ export default function DataPanel({
       </div>
 
       <div className="thin-scroll hidden overflow-x-auto rounded-xl border border-slate-200 sm:block">
-        <table className="w-full text-sm min-w-[480px]">
+        <table className={`w-full text-sm ${showReactionOrder ? "min-w-[640px]" : "min-w-[480px]"}`}>
           <thead className="bg-slate-50">
             <tr className="text-left text-xs text-slate-500">
               <th className="px-3 py-2 font-bold">No</th>
               <th className="px-3 py-2 font-bold">{cfg.paramName}</th>
               <th className="px-3 py-2 font-bold">
-                {isGas ? "V pada t=10 s (mL)" : cfg.timeLabel}
+                {isGas
+                  ? cfg.kind === "surface"
+                    ? "Volume (mL)"
+                    : "V pada t=10 s (mL)"
+                  : cfg.timeLabel}
               </th>
-              {isGas && <th className="px-3 py-2 font-bold">V akhir (mL)</th>}
+              {isGas && cfg.kind !== "surface" && (
+                <th className="px-3 py-2 font-bold">V akhir (mL)</th>
+              )}
               {cfg.kind === "surface" && (
-                <th className="px-3 py-2 font-bold">Selesai (s)</th>
+                <th className="px-3 py-2 font-bold">Waktu (s)</th>
               )}
               <th className="px-3 py-2 font-bold">
                 Laju {cfg.rateLabel} ({cfg.rateUnit})
               </th>
+              {showReactionOrder && (
+                <th className="px-3 py-2 font-bold">Orde Reaksi</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -174,15 +358,16 @@ export default function DataPanel({
                   <td className="px-3 py-2 text-slate-600">
                     {isGas ? (v10 ?? "-") : `${r.timeSec?.toFixed(1)} s`}
                   </td>
-                  {isGas && (
+                  {isGas && cfg.kind !== "surface" && (
                     <td className="px-3 py-2 text-slate-600">{vEnd ?? "-"}</td>
                   )}
                   {cfg.kind === "surface" && (
-                    <td className="px-3 py-2 text-slate-600">
-                      {r.timeSec !== undefined ? r.timeSec : "-"}
-                    </td>
+                    <td className="px-3 py-2 text-slate-600">10</td>
                   )}
-                  <td className="px-3 py-2 font-bold text-brand-700">{r.rateLabel}</td>
+                  <td className="px-3 py-2">{rateField(r)}</td>
+                  {showReactionOrder && (
+                    <td className="px-3 py-2">{reactionOrderField(r)}</td>
+                  )}
                 </tr>
               );
             })}
@@ -197,7 +382,8 @@ export default function DataPanel({
               Tabel pembacaan volume CO₂ tiap 10 detik
             </p>
             <p className="mt-0.5 text-[10px] text-cyan-700">
-              Data berasal dari skala gelas ukur terbalik pada setiap waktu pengamatan.
+              Data dilengkapi hingga bentuk paling lambat selesai. Bentuk yang lebih
+              cepat selesai tetap menunjukkan volume akhir CO₂ yang sama.
             </p>
           </div>
           <div className="space-y-2 p-2 sm:hidden">
@@ -324,7 +510,7 @@ export default function DataPanel({
             </p>
             <div className="h-52 sm:h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
+                <LineChart data={experimentRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
                     dataKey="x"
@@ -371,8 +557,13 @@ export default function DataPanel({
             Grafik Laju Reaksi vs {cfg.chartX}
           </p>
           <div className="h-52 sm:h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              {cfg.numericParam ? (
+            {rateRows.length === 0 ? (
+              <div className="flex h-full items-center justify-center rounded-lg bg-slate-50 px-6 text-center text-sm text-slate-400">
+                Grafik akan muncul setelah nilai laju reaksi diisi pada tabel.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                {cfg.numericParam ? (
                 <LineChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
@@ -410,7 +601,7 @@ export default function DataPanel({
                     strokeWidth={2.5}
                   />
                 </LineChart>
-              ) : (
+                ) : (
                 <BarChart data={rateRows} margin={{ top: 5, right: 10, bottom: 18, left: 12 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
@@ -447,8 +638,9 @@ export default function DataPanel({
                     radius={[6, 6, 0, 0]}
                   />
                 </BarChart>
-              )}
-            </ResponsiveContainer>
+                )}
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
