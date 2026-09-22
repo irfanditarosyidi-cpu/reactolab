@@ -18,6 +18,12 @@ import {
   validateHypothesisAnswer,
   type HypothesisValidationResult,
 } from "@/lib/hypothesis-validation";
+import {
+  validateConclusionAnswer,
+  validateHypothesisTestAnswer,
+  type ConclusionValidationResult,
+  type HypothesisTestValidationResult,
+} from "@/lib/inquiry-response-validation";
 import { getYouTubeEmbedUrl } from "@/lib/youtube";
 import { customScaffoldTerms } from "@/lib/scaffold-config";
 import type { ModuleDef, SectionDef } from "@/lib/module-defs";
@@ -415,11 +421,59 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
 // ---------- Section 5: Uji Hipotesis ----------
 
 export function HypoTestSection({ sec, readOnly }: SectionProps) {
-  const { def, drafts, runs, updateDraft, completeSection } = useEngine();
+  const {
+    moduleId,
+    def,
+    drafts,
+    runs,
+    scaffoldTerms,
+    scaffoldingEnabled,
+    updateDraft,
+    completeSection,
+  } = useEngine();
   const d = (drafts[sec.id] ?? {}) as HypoTestDraft;
   const hypo = drafts["section3"] as HypothesisDraft | undefined;
   const cfg = def.experiment!;
-  const valid = Boolean(d.verdict && (d.explanation ?? "").trim().length >= 10);
+  const customExplanationTerms = customScaffoldTerms(
+    scaffoldTerms,
+    "hypotest_explanation"
+  );
+  const [attempts, setAttempts] = useState(0);
+  const [checked, setChecked] = useState<{
+    answerKey: string;
+    result: HypothesisTestValidationResult;
+  } | null>(null);
+  const explanationValue = d.explanation ?? "";
+  const answerKey = `${d.verdict ?? ""}|${normalizeProblemAnswer(
+    explanationValue
+  )}`;
+  const feedback =
+    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const canAttempt = Boolean(d.verdict && explanationValue.trim().length >= 10);
+
+  const continueIfValid = async () => {
+    if (!scaffoldingEnabled) {
+      setChecked(null);
+      await completeSection(sec.id);
+      return;
+    }
+    const nextAttempt = attempts + 1;
+    const result = validateHypothesisTestAnswer(
+      moduleId,
+      d.verdict,
+      explanationValue,
+      hypo,
+      nextAttempt,
+      {
+        factors: customScaffoldTerms(scaffoldTerms, "problem_independent"),
+        relationships: customExplanationTerms,
+        evidence: customExplanationTerms,
+      }
+    );
+    setAttempts(nextAttempt);
+    setChecked({ answerKey, result });
+    if (result.valid) await completeSection(sec.id);
+  };
 
   // Generic ordering so Module 1's student-defined concentrations appear too.
   const orderedRuns: ExperimentRun[] = sortRuns(cfg, runs);
@@ -490,17 +544,51 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
       <div>
         <Label>Jelaskan: bagaimana data mendukung/menolak hipotesismu?</Label>
         <Textarea
-          value={d.explanation ?? ""}
+          value={explanationValue}
           disabled={readOnly}
           onChange={(e) => updateDraft(sec.id, { explanation: e.target.value })}
           placeholder="Bandingkan pola data (waktu/laju) dengan dugaan awalmu…"
+          aria-invalid={Boolean(feedback && !feedback.explanation.valid)}
         />
       </div>
 
+      {!readOnly && feedback && (
+        <div
+          role="status"
+          className={
+            "rounded-xl border px-3 py-3 text-sm " +
+            (feedback.valid
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-900")
+          }
+        >
+          <div className="space-y-2">
+            {[
+              ["Keputusan uji", feedback.verdict],
+              ["Penjelasan data", feedback.explanation],
+            ].map(([label, field]) => {
+              const fieldFeedback = field as HypothesisTestValidationResult["verdict"];
+              return (
+                <p key={label as string} className="flex items-start gap-2">
+                  {fieldFeedback.valid ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  <span>
+                    <b>{label as string}:</b> {fieldFeedback.message}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {!readOnly && (
         <CompleteBar
-          valid={valid}
-          onComplete={() => completeSection(sec.id)}
+          valid={canAttempt}
+          onComplete={continueIfValid}
           hint="Pilih kesimpulan uji dan tulis penjelasannya."
         />
       )}
@@ -511,11 +599,57 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
 // ---------- Section 6: Kesimpulan (Module 4 also finalizes the LKPD) ----------
 
 export function ConclusionSection({ sec, readOnly }: SectionProps) {
-  const { def, moduleId, drafts, updateDraft, completeSection } = useEngine();
+  const {
+    def,
+    moduleId,
+    drafts,
+    scaffoldTerms,
+    scaffoldingEnabled,
+    updateDraft,
+    completeSection,
+  } = useEngine();
   const d = (drafts[sec.id] ?? {}) as ConclusionDraft;
   const isFinalize = moduleId === 4;
-  const textOk = (d.text ?? "").trim().length >= 30;
-  const valid = textOk && (!isFinalize || Boolean(d.confirmFinal));
+  const [attempts, setAttempts] = useState(0);
+  const [checked, setChecked] = useState<{
+    answerKey: string;
+    result: ConclusionValidationResult;
+  } | null>(null);
+  const conclusionValue = d.text ?? "";
+  const answerKey = normalizeProblemAnswer(conclusionValue);
+  const feedback =
+    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const textOk = conclusionValue.trim().length >= 30;
+  const canAttempt = textOk && (!isFinalize || Boolean(d.confirmFinal));
+
+  const continueIfValid = async () => {
+    if (!scaffoldingEnabled) {
+      setChecked(null);
+      await completeSection(sec.id);
+      return;
+    }
+    const nextAttempt = attempts + 1;
+    const result = validateConclusionAnswer(
+      moduleId,
+      conclusionValue,
+      nextAttempt,
+      {
+        factors: customScaffoldTerms(scaffoldTerms, "problem_independent"),
+        relationships: customScaffoldTerms(
+          scaffoldTerms,
+          "conclusion_relationship"
+        ),
+        evidence: customScaffoldTerms(scaffoldTerms, "conclusion_evidence"),
+        reasons: [
+          ...customScaffoldTerms(scaffoldTerms, "hypothesis_reason"),
+          ...customScaffoldTerms(scaffoldTerms, "conclusion_reason"),
+        ],
+      }
+    );
+    setAttempts(nextAttempt);
+    setChecked({ answerKey, result });
+    if (result.valid) await completeSection(sec.id);
+  };
 
   return (
     <div className="space-y-4">
@@ -525,17 +659,52 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
           terhadap laju reaksi, berdasarkan data eksperimen.
         </Label>
         <Textarea
-          value={d.text ?? ""}
+          value={conclusionValue}
           disabled={readOnly}
           onChange={(e) => updateDraft(sec.id, { text: e.target.value })}
           rows={4}
           placeholder="Semakin … maka laju reaksi … . Hal ini ditunjukkan oleh data … dan dijelaskan oleh teori tumbukan karena …"
+          aria-invalid={Boolean(feedback && !feedback.valid)}
         />
         <Help>
           Kesimpulan yang baik menyebut pola data DAN penjelasan partikelnya (≥ 30
           karakter).
         </Help>
       </div>
+
+      {!readOnly && feedback && (
+        <div
+          role="status"
+          className={
+            "rounded-xl border px-3 py-3 text-sm " +
+            (feedback.valid
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-amber-200 bg-amber-50 text-amber-900")
+          }
+        >
+          <div className="space-y-2">
+            {[
+              ["Pola hasil", feedback.relationship],
+              ["Bukti data", feedback.evidence],
+              ["Alasan ilmiah", feedback.reasoning],
+            ].map(([label, field]) => {
+              const fieldFeedback = field as ConclusionValidationResult["relationship"];
+              return (
+                <p key={label as string} className="flex items-start gap-2">
+                  {fieldFeedback.valid ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  <span>
+                    <b>{label as string}:</b> {fieldFeedback.message}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {isFinalize && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -561,8 +730,8 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
 
       {!readOnly && (
         <CompleteBar
-          valid={valid}
-          onComplete={() => completeSection(sec.id)}
+          valid={canAttempt}
+          onComplete={continueIfValid}
           label={isFinalize ? "Selesaikan & Finalisasi LKPD" : "Simpan & Lanjut"}
           hint={
             isFinalize

@@ -121,9 +121,9 @@ export default function TeacherScaffoldingPage() {
           </button>
 
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-            Pengaturan ini berlaku pada <b>Rumusan Masalah</b>, <b>Hipotesis</b>, dan
-            <b> Representasi Simbolik</b> di Modul 1–4. Jika belum pernah diatur,
-            scaffolding otomatis aktif.
+            Pengaturan ini berlaku pada <b>Rumusan Masalah</b>, <b>Hipotesis</b>,
+            <b> Representasi Simbolik</b>, <b>Uji Hipotesis</b>, dan <b>Kesimpulan</b>
+            di Modul 1–4. Jika belum pernah diatur, scaffolding otomatis aktif.
           </div>
         </CardBody>
       </Card>

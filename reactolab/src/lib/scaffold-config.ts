@@ -2,6 +2,11 @@ import {
   HYPOTHESIS_CONCEPTS,
   HYPOTHESIS_EFFECTS,
 } from "./hypothesis-validation";
+import {
+  CONCLUSION_REASON_TERMS,
+  INQUIRY_EVIDENCE_TERMS,
+  INQUIRY_RELATIONSHIP_TERMS,
+} from "./inquiry-response-validation";
 import { getModuleDef } from "./module-defs";
 import {
   matchesAcceptedConcept,
@@ -15,7 +20,11 @@ export type ScaffoldFieldKey =
   | "hypothesis_direction"
   | "hypothesis_effect"
   | "hypothesis_reason"
-  | "symbolic_product";
+  | "symbolic_product"
+  | "hypotest_explanation"
+  | "conclusion_relationship"
+  | "conclusion_evidence"
+  | "conclusion_reason";
 
 export interface ScaffoldFieldDefinition {
   key: ScaffoldFieldKey;
@@ -60,6 +69,34 @@ export const SCAFFOLD_FIELDS: ScaffoldFieldDefinition[] = [
     section: "Representasi Simbolik",
     label: "Produk reaksi",
     description: "Rumus atau nama produk reaksi yang dapat diterima.",
+  },
+  {
+    key: "hypotest_explanation",
+    section: "Uji Hipotesis",
+    label: "Penjelasan data",
+    description:
+      "Frasa alternatif untuk hubungan faktor–laju dan rujukan terhadap bukti eksperimen.",
+  },
+  {
+    key: "conclusion_relationship",
+    section: "Kesimpulan",
+    label: "Pola hubungan hasil",
+    description:
+      "Frasa alternatif untuk hubungan faktor yang diuji dengan laju atau waktu reaksi.",
+  },
+  {
+    key: "conclusion_evidence",
+    section: "Kesimpulan",
+    label: "Rujukan bukti data",
+    description:
+      "Kata atau frasa yang menandakan penggunaan data, grafik, tabel, atau hasil pengamatan.",
+  },
+  {
+    key: "conclusion_reason",
+    section: "Kesimpulan",
+    label: "Alasan ilmiah",
+    description:
+      "Konsep ilmiah alternatif yang dapat diterima pada penjelasan akhir siswa.",
   },
 ];
 
@@ -112,6 +149,24 @@ export function getDefaultScaffoldTerms(
       return hypothesis?.reasons ?? [];
     case "symbolic_product":
       return getModuleDef(moduleId)?.experiment?.symbolicTokens ?? [];
+    case "hypotest_explanation":
+      return Array.from(
+        new Set([
+          ...(INQUIRY_RELATIONSHIP_TERMS[moduleId] ?? []),
+          ...INQUIRY_EVIDENCE_TERMS,
+        ])
+      );
+    case "conclusion_relationship":
+      return INQUIRY_RELATIONSHIP_TERMS[moduleId] ?? [];
+    case "conclusion_evidence":
+      return INQUIRY_EVIDENCE_TERMS;
+    case "conclusion_reason":
+      return Array.from(
+        new Set([
+          ...(hypothesis?.reasons ?? []),
+          ...(CONCLUSION_REASON_TERMS[moduleId] ?? []),
+        ])
+      );
   }
 }
 
@@ -136,6 +191,11 @@ export function previewScaffoldAnswer(
   }
   const normalized = normalizeScaffoldTerm(answer);
   if (normalized.replace(/[^a-z]/g, "").length < 3) return false;
-  if (field === "hypothesis_reason" && normalized.length < 15) return false;
+  if (
+    (field === "hypothesis_reason" || field === "conclusion_reason") &&
+    normalized.length < 15
+  ) {
+    return false;
+  }
   return matchesAcceptedConcept(answer, terms);
 }

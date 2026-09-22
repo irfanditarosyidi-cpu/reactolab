@@ -73,8 +73,10 @@ function ApparatusCarousel({
   const draggingRef = useRef(false);
   const dragStartRef = useRef(0);
   const dragCurrentRef = useRef(0);
+  const runningRef = useRef(running);
   const timerRefs = useRef<number[]>([]);
   const frameRefs = useRef<number[]>([]);
+  runningRef.current = running;
 
   const clearScheduled = useCallback(() => {
     timerRefs.current.forEach((timer) => window.clearTimeout(timer));
@@ -92,6 +94,7 @@ function ApparatusCarousel({
 
   const navigateTo = (nextIndex: number) => {
     if (
+      running ||
       transitioning ||
       nextIndex < 0 ||
       nextIndex >= options.length ||
@@ -111,6 +114,11 @@ function ApparatusCarousel({
     setSlidePercent(-direction * 108);
 
     schedule(() => {
+      if (runningRef.current) {
+        setSlidePercent(0);
+        setTransitioning(false);
+        return;
+      }
       onSelect(options[nextIndex].value);
       setAnimate(false);
       setSlidePercent(direction * 108);
@@ -131,7 +139,13 @@ function ApparatusCarousel({
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (transitioning || (event.target as HTMLElement).closest("button")) return;
+    if (
+      running ||
+      transitioning ||
+      (event.target as HTMLElement).closest("button")
+    ) {
+      return;
+    }
     draggingRef.current = true;
     dragStartRef.current = event.clientX;
     dragCurrentRef.current = 0;
@@ -243,7 +257,7 @@ function ApparatusCarousel({
             progress={progress}
             volume={volume}
             running={running}
-            orbitEnabled={false}
+            orbitEnabled={running}
             className="absolute inset-0"
           />
 
@@ -260,7 +274,7 @@ function ApparatusCarousel({
         <button
           type="button"
           onClick={() => navigateTo(activeIndex - 1)}
-          disabled={activeIndex === 0 || transitioning}
+          disabled={running || activeIndex === 0 || transitioning}
           aria-label="Lihat rangkaian sebelumnya"
           className="absolute left-2 top-1/2 z-30 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/90 bg-white/90 text-slate-700 shadow-lg backdrop-blur transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 sm:left-4"
         >
@@ -269,7 +283,7 @@ function ApparatusCarousel({
         <button
           type="button"
           onClick={() => navigateTo(activeIndex + 1)}
-          disabled={activeIndex === options.length - 1 || transitioning}
+          disabled={running || activeIndex === options.length - 1 || transitioning}
           aria-label="Lihat rangkaian berikutnya"
           className="absolute right-2 top-1/2 z-30 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/90 bg-white/90 text-slate-700 shadow-lg backdrop-blur transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30 sm:right-4"
         >
@@ -283,7 +297,9 @@ function ApparatusCarousel({
           <GripHorizontal className="h-4 w-4" />
           {mechanismOpen
             ? "Mekanisme terhubung dengan simulasi alat"
-            : "Swipe, tombol panah, atau titik kondisi"}
+            : running
+              ? "Drag objek untuk memutar — jeda dahulu untuk berpindah kondisi"
+              : "Swipe, tombol panah, atau titik kondisi"}
         </div>
         <div className="flex items-center gap-2" role="tablist" aria-label="Pilih rangkaian eksperimen">
           {options.map((option, index) => {
@@ -297,7 +313,7 @@ function ApparatusCarousel({
                 aria-selected={active}
                 aria-label={`${option.label}${saved ? ", data tersimpan" : ""}`}
                 onClick={() => navigateTo(index)}
-                disabled={transitioning}
+                disabled={running || transitioning}
                 className={cn(
                   "grid h-8 min-w-8 place-items-center rounded-full border px-2 text-[10px] font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                   active
@@ -404,6 +420,7 @@ export default function M4SimStage({
   }, [cfg, finish]);
 
   const reset = (next?: string) => {
+    if (next && runningRef.current) return;
     timeRef.current = 0;
     doneRef.current = false;
     runningRef.current = false;
@@ -438,7 +455,10 @@ export default function M4SimStage({
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => setRunning(false)}
+                onClick={() => {
+                  runningRef.current = false;
+                  setRunning(false);
+                }}
               >
                 <Pause className="h-4 w-4" />
                 Jeda
@@ -446,7 +466,10 @@ export default function M4SimStage({
             ) : (
               <Button
                 size="sm"
-                onClick={() => setRunning(true)}
+                onClick={() => {
+                  runningRef.current = true;
+                  setRunning(true);
+                }}
                 disabled={done || !opt}
               >
                 <Play className="h-4 w-4" />
