@@ -15,6 +15,10 @@ import {
 import { useRouter } from "next/navigation";
 import { get, onValue, ref, set, update } from "firebase/database";
 import { db } from "@/lib/firebase/client";
+import {
+  createDiscussionAttemptId,
+  LEGACY_DISCUSSION_ATTEMPT_ID,
+} from "@/lib/discussion";
 import { P } from "@/lib/paths";
 import type { ScaffoldModuleConfig } from "@/lib/scaffold-config";
 import {
@@ -27,6 +31,7 @@ import {
   buildProgressSkeleton,
   CLOSING_MODULE_ID,
   closingPrerequisitesComplete,
+  DISCUSSION_MODULE_ID,
   moduleCompletionPercent,
   normalizeProgress,
   overallPercent,
@@ -76,8 +81,12 @@ export interface EngineCtx {
 
 const Ctx = createContext<EngineCtx | null>(null);
 
+export function useOptionalEngine(): EngineCtx | null {
+  return useContext(Ctx);
+}
+
 export function useEngine(): EngineCtx {
-  const c = useContext(Ctx);
+  const c = useOptionalEngine();
   if (!c) throw new Error("useEngine must be used inside the module engine");
   return c;
 }
@@ -139,8 +148,25 @@ export function ModuleEngineProvider({
       const storedProgress: StudentProgress = progressSnap.exists()
         ? (progressSnap.val() as StudentProgress)
         : buildProgressSkeleton();
+      const hasLegacySevenModuleFlow = Boolean(storedProgress.modules?.["7"]);
       let progress = normalizeProgress(storedProgress);
-      if (
+      if (hasLegacySevenModuleFlow) {
+        const [legacyDiscussionResponse, legacyClosingResponse] =
+          await Promise.all([
+            get(ref(db, P.moduleResponses(classId, uid, 6))),
+            get(ref(db, P.moduleResponses(classId, uid, 7))),
+          ]);
+        await update(ref(db), {
+          [P.progress(classId, uid)]: progress,
+          [P.moduleResponses(classId, uid, 5)]: legacyDiscussionResponse.exists()
+            ? legacyDiscussionResponse.val()
+            : null,
+          [P.moduleResponses(classId, uid, 6)]: legacyClosingResponse.exists()
+            ? legacyClosingResponse.val()
+            : null,
+          [P.moduleResponses(classId, uid, 7)]: null,
+        });
+      } else if (
         !progressSnap.exists() ||
         JSON.stringify(progress) !== JSON.stringify(storedProgress)
       ) {
@@ -186,6 +212,13 @@ export function ModuleEngineProvider({
       const now = Date.now();
       const p = clone(progress);
       const m = p.modules[String(moduleId)];
+      if (moduleId === DISCUSSION_MODULE_ID && !m.attemptId) {
+        // Existing Module 5 work belongs to the historical single-attempt
+        // forum. A fresh or reset module receives its own writable attempt.
+        m.attemptId = respSnap.exists()
+          ? LEGACY_DISCUSSION_ATTEMPT_ID
+          : createDiscussionAttemptId(now);
+      }
       if (m.status === "unlocked") {
         m.status = "in_progress";
         m.startedAt = now;

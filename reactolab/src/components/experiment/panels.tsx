@@ -89,14 +89,19 @@ export function SymbolicPanel({
   onValidated: (ok: boolean) => void;
 }) {
   const [attempts, setAttempts] = useState(0);
-  const [feedback, setFeedback] = useState<"" | "wrong">("");
+  const [feedback, setFeedback] = useState<"" | "correct" | "wrong">("");
 
   const verify = () => {
-    const good =
-      !scaffoldingEnabled || checkSymbolic(cfg, answer, acceptedProducts);
-    setFeedback(good ? "" : "wrong");
+    if (!scaffoldingEnabled) {
+      setFeedback("");
+      onValidated(true);
+      return;
+    }
+
+    const good = checkSymbolic(cfg, answer, acceptedProducts);
+    setFeedback(good ? "correct" : "wrong");
     if (!good) setAttempts((a) => a + 1);
-    onValidated(good);
+    onValidated(false);
   };
 
   return (
@@ -111,23 +116,64 @@ export function SymbolicPanel({
             disabled={readOnly || ok}
             onChange={(e) => {
               onChange(formatChemicalSubscripts(e.target.value));
-              setFeedback("");
             }}
           />
         </div>
         {!ok && !readOnly && (
           <div className="mt-3 flex items-center gap-2">
-            <Button size="sm" onClick={verify} disabled={answer.trim().length < 2}>
+            <Button size="sm" onClick={verify} disabled={!answer.trim()}>
               {scaffoldingEnabled ? "Periksa" : "Lanjutkan"}
             </Button>
           </div>
         )}
-        {scaffoldingEnabled && feedback === "wrong" && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-            <p className="text-sm font-semibold text-amber-900">Petunjuk:</p>
-            <p className="mt-0.5 text-sm text-amber-800">
-              {symbolicHint(cfg, attempts)}
+        {scaffoldingEnabled && feedback !== "" && !ok && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-amber-900">
+            <p className="text-sm font-semibold">Scaffolding reflektif:</p>
+            {feedback === "wrong" && (
+              <p className="mt-1 text-sm">{symbolicHint(cfg, attempts)}</p>
+            )}
+            {feedback === "correct" && (
+              <p className="mt-1 text-sm">
+                Jawabanmu sudah memuat produk yang diperlukan. Tetap lakukan
+                pemeriksaan mandiri sebelum melanjutkan.
+              </p>
+            )}
+            <p className="mt-2 text-xs font-semibold">
+              Apa pun hasil pemeriksaannya, perhatikan kembali hal berikut:
             </p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
+              <li>
+                Bandingkan jumlah atom setiap unsur pada sisi reaktan dan produk;
+                jumlahnya harus setara.
+              </li>
+              <li>
+                Pastikan seluruh produk reaksi sudah ditulis dan sesuai dengan gejala
+                yang diamati.
+              </li>
+              <li>
+                Bedakan koefisien reaksi, indeks pada rumus kimia, dan simbol wujud
+                zat.
+              </li>
+              <li>
+                Hubungkan persamaan dengan laju: reaktan berkurang dan produk
+                terbentuk dalam selang waktu tertentu.
+              </li>
+            </ul>
+            <div className="mt-3 flex flex-col gap-2 border-t border-amber-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-amber-800">
+                Ini hanya peringatan scaffolding. Kamu tetap dapat melanjutkan.
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setFeedback("");
+                  onValidated(true);
+                }}
+              >
+                Tetap lanjutkan
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -156,12 +202,30 @@ const EXPLAIN_FIELDS = [
 export function ExplainPanel({
   value,
   readOnly,
+  completed,
+  scaffoldingEnabled,
   onChange,
+  onValidated,
 }: {
   value: { makro?: string; submikro?: string; simbolik?: string };
   readOnly: boolean;
+  completed: boolean;
+  scaffoldingEnabled: boolean;
   onChange: (patch: Record<string, string>) => void;
+  onValidated: (ok: boolean) => void;
 }) {
+  const [showScaffolding, setShowScaffolding] = useState(false);
+  const filled = explainComplete(value);
+
+  const verify = () => {
+    if (!scaffoldingEnabled) {
+      onValidated(true);
+      return;
+    }
+    setShowScaffolding(true);
+    onValidated(false);
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
@@ -173,12 +237,70 @@ export function ExplainPanel({
           <Textarea
             rows={2}
             value={value[f.key] ?? ""}
-            disabled={readOnly}
+            readOnly={readOnly || completed}
+            aria-readonly={readOnly || completed}
+            className={
+              readOnly || completed
+                ? "cursor-not-allowed bg-slate-50 text-slate-600"
+                : undefined
+            }
             onChange={(e) => onChange({ ...value, [f.key]: e.target.value })}
             placeholder={f.ph}
           />
         </div>
       ))}
+      {!readOnly && !completed && (
+        <Button size="sm" disabled={!filled} onClick={verify}>
+          {scaffoldingEnabled ? "Periksa" : "Lanjutkan"}
+        </Button>
+      )}
+      {scaffoldingEnabled && showScaffolding && !completed && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-amber-900">
+          <p className="text-sm font-semibold">Scaffolding reflektif:</p>
+          <p className="mt-1 text-xs font-semibold">
+            Sebelum melanjutkan, periksa kembali hubungan ketiga level berikut:
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs leading-relaxed">
+            <li>
+              <b>Makroskopik:</b> sebutkan gejala yang benar-benar dapat diamati atau
+              diukur, seperti gelembung, kekeruhan, waktu, atau volume gas.
+            </li>
+            <li>
+              <b>Submikroskopik:</b> jelaskan gerak dan tumbukan partikel serta
+              perubahan jumlah tumbukan efektif akibat faktor yang diuji.
+            </li>
+            <li>
+              <b>Simbolik:</b> hubungkan persamaan reaksi, rumus zat, dan nilai laju
+              atau data hasil perhitungan.
+            </li>
+            <li>
+              Pastikan ketiga penjelasan membahas peristiwa yang sama dan saling
+              terhubung, bukan mengulang satu kalimat yang sama.
+            </li>
+          </ul>
+          <div className="mt-3 flex flex-col gap-2 border-t border-amber-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-amber-800">
+              Ini hanya peringatan scaffolding. Kamu tetap dapat melanjutkan.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setShowScaffolding(false);
+                onValidated(true);
+              }}
+            >
+              Tetap lanjutkan
+            </Button>
+          </div>
+        </div>
+      )}
+      {completed && !readOnly && (
+        <Help>
+          Penjelasan tiga level telah dikunci. Gunakan Reset Simulasi jika ingin
+          menyusun jawaban baru.
+        </Help>
+      )}
     </div>
   );
 }

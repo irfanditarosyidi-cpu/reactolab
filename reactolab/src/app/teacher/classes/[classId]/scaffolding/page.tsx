@@ -59,17 +59,20 @@ export default function TeacherScaffoldingPage() {
   return (
     <div className="space-y-5">
       <Link
-        href={`/teacher/classes/${classId}`}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-brand-700"
+        href="/teacher/classes"
+        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
       >
-        <ArrowLeft className="h-4 w-4" /> Kembali ke {classInfo.className}
+        <ArrowLeft className="h-4 w-4" /> Semua Kelas
       </Link>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex-1">
           <h1 className="text-2xl font-black text-slate-900">Pengaturan Scaffolding</h1>
+          <p className="mt-1 text-sm font-bold text-brand-700">
+            {classInfo.className}
+          </p>
           <p className="mt-1 text-sm text-slate-500">
-            Atur pemeriksaan jawaban dan umpan balik untuk siswa kelas {classInfo.className}.
+            Atur pemeriksaan jawaban dan umpan balik untuk siswa kelas aktif.
           </p>
         </div>
         <Button loading={saving} onClick={() => void save()}>
@@ -103,7 +106,7 @@ export default function TeacherScaffoldingPage() {
               </span>
               <span className="mt-0.5 block text-xs leading-relaxed text-slate-500">
                 {enabled
-                  ? "Sistem memeriksa konsep pada jawaban dan memberikan petunjuk bertahap jika diperlukan."
+                  ? "Sistem memeriksa jawaban dan memberikan peringatan serta petunjuk bertahap. Siswa tetap dapat melanjutkan."
                   : "Siswa dapat melanjutkan setelah mengisi jawaban minimum, tanpa validasi konsep dan umpan balik otomatis."}
               </span>
             </span>
@@ -123,7 +126,9 @@ export default function TeacherScaffoldingPage() {
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
             Pengaturan ini berlaku pada <b>Rumusan Masalah</b>, <b>Hipotesis</b>,
             <b> Representasi Simbolik</b>, <b>Uji Hipotesis</b>, dan <b>Kesimpulan</b>
-            di Modul 1–4. Jika belum pernah diatur, scaffolding otomatis aktif.
+            di Modul 1–4, serta rangkaian studi kasus di <b>Modul 5</b>. Scaffolding
+            hanya berupa peringatan dan tidak mengunci tahap berikutnya. Jika belum
+            pernah diatur, scaffolding otomatis aktif.
           </div>
         </CardBody>
       </Card>

@@ -134,8 +134,9 @@ export default function AdminScaffoldsPage() {
       <div>
         <h1 className="text-2xl font-black text-slate-900">Pengaturan Scaffolding</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
-          Tambahkan variasi kata, frasa, atau rumus yang tetap dianggap mengarah pada
-          konsep yang benar. Istilah bawaan sistem tetap terlindungi.
+          Tambahkan variasi kata, frasa, atau rumus yang dianggap mengarah pada
+          konsep yang disarankan. Hasil pemeriksaan hanya menjadi peringatan dan
+          tidak menghalangi siswa melanjutkan.
         </p>
       </div>
 
@@ -232,8 +233,8 @@ export default function AdminScaffoldsPage() {
                 </Button>
               </form>
               <p className="mt-2 text-xs text-amber-700">
-                Hindari istilah yang terlalu umum karena dapat membuat jawaban tidak relevan
-                ikut diterima.
+                Hindari istilah yang terlalu umum agar saran yang diterima siswa tetap
+                relevan.
               </p>
 
               {customEntries.length === 0 ? (
@@ -313,8 +314,8 @@ export default function AdminScaffoldsPage() {
                 )}
                 <span>
                   {previewResult
-                    ? "Jawaban cocok dengan salah satu istilah yang diterima."
-                    : "Jawaban belum cocok dengan istilah yang tersedia."}
+                    ? "Jawaban cocok dengan salah satu istilah yang disarankan."
+                    : "Jawaban akan memperoleh peringatan, tetapi siswa tetap dapat melanjutkan."}
                 </span>
               </div>
             )}

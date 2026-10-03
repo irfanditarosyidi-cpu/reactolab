@@ -9,12 +9,14 @@ export default function Modal({
   title,
   children,
   footer,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  size?: "md" | "xl";
 }) {
   if (!open) return null;
   return (
@@ -23,7 +25,11 @@ export default function Modal({
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 max-h-[90vh] flex flex-col">
+      <div
+        className={`relative bg-white w-full ${
+          size === "xl" ? "max-w-5xl" : "max-w-lg"
+        } rounded-2xl shadow-xl border border-slate-200 max-h-[90vh] flex flex-col`}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="font-bold text-slate-900">{title}</h3>
           <button

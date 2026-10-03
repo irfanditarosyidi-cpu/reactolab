@@ -24,10 +24,47 @@ export const P = {
   lkpd: (cid: string, uid: string) => `lkpdSnapshots/${cid}/${uid}`,
   cases: (cid: string) => `discussionCases/${cid}`,
   caseItem: (cid: string, caseId: string) => `discussionCases/${cid}/${caseId}`,
+  publishedCases: (cid: string) => `publishedDiscussionCases/${cid}`,
+  publishedCase: (cid: string, caseId: string) =>
+    `publishedDiscussionCases/${cid}/${caseId}`,
   posts: (cid: string, caseId: string) => `forumPosts/${cid}/${caseId}`,
   post: (cid: string, caseId: string, uid: string) =>
     `forumPosts/${cid}/${caseId}/${uid}`,
   comments: (cid: string, caseId: string) => `forumComments/${cid}/${caseId}`,
+  arguments: (cid: string, caseId: string) => `forumArguments/${cid}/${caseId}`,
+  argument: (cid: string, caseId: string, uid: string) =>
+    `forumArguments/${cid}/${caseId}/${uid}`,
+  argumentAttempts: (cid: string, caseId: string) =>
+    `forumArgumentAttempts/${cid}/${caseId}`,
+  argumentAttemptsByStudent: (cid: string, caseId: string, uid: string) =>
+    `forumArgumentAttempts/${cid}/${caseId}/${uid}`,
+  argumentAttempt: (
+    cid: string,
+    caseId: string,
+    uid: string,
+    attemptId: string
+  ) => `forumArgumentAttempts/${cid}/${caseId}/${uid}/${attemptId}`,
+  peerReviews: (cid: string, caseId: string) =>
+    `forumPeerReviews/${cid}/${caseId}`,
+  peerReviewsByStudent: (cid: string, caseId: string, uid: string) =>
+    `forumPeerReviews/${cid}/${caseId}/${uid}`,
+  peerReview: (cid: string, caseId: string, uid: string, targetUid: string) =>
+    `forumPeerReviews/${cid}/${caseId}/${uid}/${targetUid}`,
+  peerReviewAttempts: (cid: string, caseId: string) =>
+    `forumPeerReviewAttempts/${cid}/${caseId}`,
+  peerReviewsByAttempt: (
+    cid: string,
+    caseId: string,
+    uid: string,
+    attemptId: string
+  ) => `forumPeerReviewAttempts/${cid}/${caseId}/${uid}/${attemptId}`,
+  peerReviewAttempt: (
+    cid: string,
+    caseId: string,
+    uid: string,
+    attemptId: string,
+    targetUid: string
+  ) => `forumPeerReviewAttempts/${cid}/${caseId}/${uid}/${attemptId}/${targetUid}`,
   discussionProgress: (cid: string, uid: string) =>
     `discussionProgress/${cid}/${uid}`,
   conclusion: (cid: string) => `teacherConclusions/${cid}`,

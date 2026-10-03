@@ -1,7 +1,6 @@
 "use client";
 
-// /teacher/classes/[classId]/students → the student list lives on the class
-// detail page; keep the PRD route alive via redirect.
+// Keep the legacy students route alive by forwarding it to class monitoring.
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -11,7 +10,7 @@ export default function StudentsRedirect() {
   const { classId } = useParams<{ classId: string }>();
   const router = useRouter();
   useEffect(() => {
-    router.replace(`/teacher/classes/${classId}`);
+    router.replace(`/teacher/classes/${classId}/monitoring`);
   }, [classId, router]);
-  return <FullPageSpinner label="Membuka daftar siswa…" />;
+  return <FullPageSpinner label="Membuka Monitoring Siswa..." />;
 }

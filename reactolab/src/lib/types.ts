@@ -27,6 +27,8 @@ export interface ModuleProgress {
   status: ModuleStatus;
   currentSection: string | null;
   completionPercent: number;
+  /** Identifies the active Module 5 run so a reset can create a fresh forum attempt. */
+  attemptId?: string;
   startedAt?: number;
   lastOpenedAt?: number;
   completedAt?: number;
@@ -87,9 +89,85 @@ export interface ExperimentRun {
   at: number;
 }
 
+export interface DiscussionSource {
+  id: string;
+  label: string;
+  url: string;
+  note?: string;
+}
+
+export interface StakeholderPerspective {
+  id: string;
+  stakeholder: string;
+  argument: string;
+}
+
+export interface EvidenceChartPoint {
+  label: string;
+  value: number;
+  unit?: string;
+}
+
+export interface DiscussionEvidence {
+  id: string;
+  title: string;
+  content: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  chartTitle?: string;
+  chartXAxisTitle?: string;
+  chartYAxisTitle?: string;
+  chartPoints?: EvidenceChartPoint[];
+}
+
+export type DiscussionScaffoldStage =
+  | "problem"
+  | "hypothesis"
+  | "evidence"
+  | "testing"
+  | "conclusion";
+
+export interface DiscussionCaseScaffolding {
+  problemHints?: string[];
+  hypothesisHints?: string[];
+  evidenceHints?: string[];
+  testingHints?: string[];
+  conclusionHints?: string[];
+}
+
 export interface DiscussionCase {
   id?: string;
+  /** Stable identifier for cases bundled with the application. */
+  defaultKey?: string;
+  schemaVersion?: 2;
   title: string;
+  narrative?: string;
+  imageUrl?: string;
+  imageCaption?: string;
+  /** Legacy photo metadata retained for compatibility with saved cases. */
+  imageAlt?: string;
+  imageAttribution?: string;
+  imageSourceUrl?: string;
+  /** Transitional free-form bibliography retained for compatibility. */
+  bibliography?: string;
+  /** Legacy structured sources retained for compatibility with saved cases. */
+  sources?: DiscussionSource[];
+  phenomenonQuestion?: string;
+  stakeholderPerspectives?: StakeholderPerspective[];
+  otherStakeholderPrompt?: string;
+  problemGuide?: string;
+  hypothesisPrompt?: string;
+  scientificEvidence?: DiscussionEvidence[];
+  socioeconomicEvidence?: DiscussionEvidence[];
+  evidencePrompt?: string;
+  conclusionPrompt?: string;
+  /** Progressive, case-specific hints authored by the teacher. */
+  scaffolding?: DiscussionCaseScaffolding;
+  allowPeerReviewException?: boolean;
+  peerReviewExceptionNote?: string;
+  archivedAt?: number;
+  archivedReason?: string;
+  /** Legacy fields are retained so historical cases and responses keep rendering. */
   articleUrl: string;
   articleNote?: string;
   question: string;
@@ -101,9 +179,20 @@ export interface DiscussionCase {
 }
 
 export interface ForumPost {
-  claim: string;
-  evidence: string;
-  reasoning: string;
+  format?: "cer";
+  claim?: string;
+  evidence?: string;
+  reasoning?: string;
+  studentName: string;
+  submittedAt: number;
+}
+
+export interface ForumArgument {
+  format: "hypothesis_argument";
+  /** Present on the versioned forum flow; absent on historical arguments. */
+  attemptId?: string;
+  verdict: "supported" | "not_supported";
+  argument: string;
   studentName: string;
   submittedAt: number;
 }
@@ -116,6 +205,84 @@ export interface ForumComment {
   targetName?: string;
   text: string;
   createdAt: number;
+}
+
+export interface ForumPeerReview {
+  reviewerId: string;
+  reviewerName: string;
+  /** Module 5 attempt that created this review. */
+  attemptId?: string;
+  targetStudentId: string;
+  targetName: string;
+  /** Attempt of the argument being reviewed, if it uses the versioned flow. */
+  targetAttemptId?: string;
+  differenceReason: string;
+  response: string;
+  createdAt: number;
+}
+
+export interface StudentOwnEvidence {
+  id: string;
+  category: "scientific" | "socioeconomic";
+  content: string;
+  source: string;
+  selectionReason: string;
+}
+
+export interface Module5CaseResponse {
+  schemaVersion: 2;
+  attemptId?: string;
+  caseSnapshot: DiscussionCase;
+  caseOrder: number;
+  startedAt: number;
+  orientation?: {
+    otherStakeholder?: string;
+    completedAt?: number;
+  };
+  problem?: {
+    chemicalFactor?: string;
+    impactRisk?: string;
+    stakeholderConsideration?: string;
+    question?: string;
+    completedAt?: number;
+  };
+  hypothesis?: {
+    position?: string;
+    reason?: string;
+    completedAt?: number;
+  };
+  evidence?: {
+    selectedScientificIds?: string[];
+    selectedSocioeconomicIds?: string[];
+    ownEvidence?: StudentOwnEvidence[];
+    selectionReason?: string;
+    completedAt?: number;
+  };
+  testing?: {
+    verdict?: "supported" | "not_supported";
+    argument?: string;
+    submittedAt?: number;
+  };
+  peerReviews?: Record<string, ForumPeerReview>;
+  peerReviewDrafts?: Record<
+    string,
+    { differenceReason?: string; response?: string }
+  >;
+  peerExceptionUsedAt?: number;
+  peerExceptionNote?: string;
+  conclusion?: {
+    problemAnswer?: string;
+    policySolution?: string;
+    evidenceBasis?: string;
+    submittedAt?: number;
+  };
+  /** Legacy response fields retained during lazy migration. */
+  read?: boolean;
+  claim?: string;
+  evidenceText?: string;
+  reasoning?: string;
+  decision?: string;
+  decisionSubmittedAt?: number;
 }
 
 export interface TeacherConclusion {
@@ -196,6 +363,7 @@ export interface ExperimentDraft {
   symbolicAnswer?: string;
   symbolicOk?: boolean;
   explain?: { makro?: string; submikro?: string; simbolik?: string };
+  explainOk?: boolean;
   /** Module 1: the step-by-step simulation tutorial has been completed once. */
   m1TutorialSeen?: boolean;
   /** Module 2: the step-by-step simulation tutorial has been completed once. */

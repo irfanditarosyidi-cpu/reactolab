@@ -28,9 +28,8 @@ const MISSIONS: MissionDef[] = [
   { backendId: 2, emoji: "🔬", title: "Faktor Luas Permukaan",   label: "Misi 2" },
   { backendId: 3, emoji: "🌡️", title: "Faktor Suhu",             label: "Misi 3" },
   { backendId: 4, emoji: "⚗️",  title: "Faktor Katalis",          label: "Misi 4" },
-  { backendId: 6, emoji: "💬", title: "Forum Diskusi Ilmiah",    label: "Tahap Lanjutan" },
-  { backendId: 5, emoji: "📘", title: "Konfirmasi Materi",       label: "Tahap Akhir" },
-  { backendId: 7, emoji: "🎉", title: "Penutup",                 label: "Finish" },
+  { backendId: 5, emoji: "💬", title: "Aplikasi Konsep",         label: "Studi Kasus" },
+  { backendId: 6, emoji: "🎉", title: "Penutup",                 label: "Finish" },
 ];
 
 type NodeState = "current" | "locked" | "completed";
@@ -208,23 +207,21 @@ export function ReactionRatePrompt({ onStart }: { onStart?: () => void }) {
 // Checkpoint positions are matched to the static pre-rendered 3D road assets.
 // The road itself is deliberately a raster image, not an interactive 3D scene.
 const DESKTOP_NODES = [
-  { x: 8.2,  y: 58.3 },
-  { x: 23.5, y: 74.2 },
-  { x: 35.4, y: 28.8 },
-  { x: 49.5, y: 68.5 },
-  { x: 62.1, y: 28.8 },
-  { x: 76.9, y: 69.0 },
-  { x: 91.5, y: 20.2 },
+  { x: 7.7, y: 52.8 },
+  { x: 21.9, y: 65.8 },
+  { x: 33.7, y: 29.7 },
+  { x: 60.7, y: 29.7 },
+  { x: 74.1, y: 62.6 },
+  { x: 86.7, y: 22.2 },
 ];
 
 const MOBILE_NODES = [
   { x: 21.0, y: 7.4 },
-  { x: 63.1, y: 19.9 },
-  { x: 28.4, y: 32.7 },
-  { x: 71.0, y: 46.4 },
+  { x: 63.1, y: 19.5 },
+  { x: 28.1, y: 33.2 },
   { x: 31.6, y: 59.0 },
-  { x: 70.8, y: 76.0 },
-  { x: 48.4, y: 88.5 },
+  { x: 71.1, y: 75.4 },
+  { x: 48.5, y: 89.1 },
 ];
 
 type MapPoint = { x: number; y: number };
@@ -505,10 +502,10 @@ function MissionMap({
       {/* ═══ DESKTOP ROAD MAP ═══ */}
       <div
         className="relative hidden w-full overflow-visible md:block"
-        style={{ aspectRatio: "1774 / 520" }}
+        style={{ aspectRatio: "2169 / 725" }}
       >
         <Image
-          src="/images/mission-map/mission-road-3d-desktop.png"
+          src="/images/mission-map/mission-road-6-modules-desktop.png"
           alt=""
           fill
           sizes="(min-width: 1024px) 1152px, 100vw"
@@ -545,10 +542,10 @@ function MissionMap({
       {/* ═══ MOBILE ROAD MAP ═══ */}
       <div
         className="relative w-full overflow-visible md:hidden"
-        style={{ aspectRatio: "832 / 1536" }}
+        style={{ aspectRatio: "923 / 1704" }}
       >
         <Image
-          src="/images/mission-map/mission-road-3d-mobile.png"
+          src="/images/mission-map/mission-road-6-modules-mobile.png"
           alt=""
           fill
           sizes="100vw"

@@ -167,17 +167,20 @@ export default function TeacherPracticePage() {
   return (
     <div className="space-y-5">
       <Link
-        href={`/teacher/classes/${classId}`}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-brand-700"
+        href="/teacher/classes"
+        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
       >
-        <ArrowLeft className="h-4 w-4" /> Kembali ke {classInfo.className}
+        <ArrowLeft className="h-4 w-4" /> Semua Kelas
       </Link>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="flex-1">
           <h1 className="text-2xl font-black text-slate-900">Latihan Soal</h1>
+          <p className="mt-1 text-sm font-bold text-brand-700">
+            {classInfo.className}
+          </p>
           <p className="mt-1 text-sm text-slate-500">
-            Atur ketersediaan dan bank soal untuk siswa kelas {classInfo.className}.
+            Atur ketersediaan dan bank soal untuk siswa kelas aktif.
           </p>
         </div>
         <Button loading={saving} disabled={!canSave} onClick={() => void save()}>

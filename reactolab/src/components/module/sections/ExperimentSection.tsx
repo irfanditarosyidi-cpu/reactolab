@@ -147,7 +147,7 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
   const allDataEntered = allRatesEntered && allReactionOrdersEntered;
   const symbolicOk = Boolean(d.symbolicOk);
   const explain = d.explain ?? {};
-  const explainOk = explainComplete(explain);
+  const explainOk = Boolean(d.explainOk) || (readOnly && explainComplete(explain));
 
   const toggleOption = (value: string) => {
     if (readOnly || setupLocked) return;
@@ -508,7 +508,10 @@ export default function ExperimentSection({ sec, readOnly }: SectionProps) {
         <ExplainPanel
           value={explain}
           readOnly={readOnly}
+          completed={explainOk}
+          scaffoldingEnabled={scaffoldingEnabled}
           onChange={(v) => updateDraft(sec.id, { explain: v })}
+          onValidated={(ok) => updateDraft(sec.id, { explainOk: ok })}
         />
       </SubStep>
 

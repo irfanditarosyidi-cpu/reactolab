@@ -12,16 +12,15 @@ import {
   ProblemSection,
 } from "./sections/InquirySections";
 import ExperimentSection from "./sections/ExperimentSection";
-import { M5Collision, M5Concept, M5Equation } from "./sections/Module5Sections";
 import {
   M6Articles,
-  M6Cases,
   M6CER,
   M6Conclusion,
   M6Decision,
   M6Forum,
   M6Intro,
 } from "./sections/Module6Sections";
+import { Module5CaseFlow } from "./sections/Module5CaseFlow";
 import { M7Closing } from "./sections/Module7Section";
 
 export function renderSection(sec: SectionDef, readOnly: boolean) {
@@ -39,16 +38,10 @@ export function renderSection(sec: SectionDef, readOnly: boolean) {
       return <HypoTestSection {...props} />;
     case "conclusion":
       return <ConclusionSection {...props} />;
-    case "m5concept":
-      return <M5Concept {...props} />;
-    case "m5equation":
-      return <M5Equation {...props} />;
-    case "m5collision":
-      return <M5Collision {...props} />;
     case "m6intro":
       return <M6Intro {...props} />;
     case "m6cases":
-      return <M6Cases {...props} />;
+      return <Module5CaseFlow {...props} />;
     case "m6articles":
       return <M6Articles {...props} />;
     case "m6cer":

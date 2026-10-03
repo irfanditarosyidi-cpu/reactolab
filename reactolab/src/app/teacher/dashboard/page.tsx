@@ -4,13 +4,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, GraduationCap, Percent, Users } from "lucide-react";
+import { Activity, BookOpen, GraduationCap, Percent, Users } from "lucide-react";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge, Spinner } from "@/components/ui/misc";
 import Button from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { listenTeacherClasses, readOnce } from "@/lib/db";
 import { P } from "@/lib/paths";
+import { normalizeProgress } from "@/lib/progress";
 import { formatRelative } from "@/lib/utils";
 import type {
   ClassInfo,
@@ -58,7 +59,8 @@ export default function TeacherDashboard() {
         const memberEntries = Object.entries(members ?? {});
         students += memberEntries.length;
         for (const [uid, m] of memberEntries) {
-          const p = progressAll?.[uid];
+          const storedProgress = progressAll?.[uid];
+          const p = storedProgress ? normalizeProgress(storedProgress) : null;
           if (p) {
             pctSum += p.overallPercent ?? 0;
             pctN++;
@@ -142,6 +144,23 @@ export default function TeacherDashboard() {
           </Card>
         ))}
       </div>
+
+      <Link href="/teacher/teaching-materials" className="block group">
+        <Card className="border-brand-200 transition-all group-hover:border-brand-400 group-hover:shadow-md">
+          <CardBody className="flex items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white">
+              <BookOpen className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-slate-900">Konfirmasi Materi</p>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Buka bahan ajar konsep laju reaksi, persamaan laju, dan teori tumbukan.
+              </p>
+            </div>
+            <span className="text-sm font-bold text-brand-700">Buka →</span>
+          </CardBody>
+        </Card>
+      </Link>
 
       <Card>
         <CardHeader

@@ -1,210 +1,300 @@
 "use client";
 
-// Discussion case authoring + forum overview + teacher conclusion
-// (PRD §6.2, §24): create case (article link + own question + decision prompt),
-// publish/unpublish, read student CER & comments, publish conclusion.
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { push, ref, set, update } from "firebase/database";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { ref, set } from "firebase/database";
 import {
+  Archive,
+  ArrowDown,
   ArrowLeft,
-  ExternalLink,
-  Eye,
-  EyeOff,
+  ArrowUp,
   MessageCircle,
-  Pencil,
   Plus,
+  RotateCcw,
   Send,
+  Settings2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
-import EmbeddedLink from "@/components/ui/EmbeddedLink";
-import { Help, Input, Label, Textarea } from "@/components/ui/forms";
-import Modal from "@/components/ui/Modal";
+import { Textarea } from "@/components/ui/forms";
 import { Avatar, Badge, EmptyState, Spinner } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
 import { db } from "@/lib/firebase/client";
-import { listen, listenAllCases, listenComments, listenPosts } from "@/lib/db";
+import {
+  ensureDefaultDiscussionCases,
+  listen,
+  listenAllCases,
+  listenArgumentAttempts,
+  listenArguments,
+  listenComments,
+  listenPosts,
+  saveDiscussionCase,
+  syncPublishedCaseProjection,
+} from "@/lib/db";
+import {
+  casePublishIssues,
+  forumPostBody,
+  forumPostLabel,
+} from "@/lib/discussion";
 import { P } from "@/lib/paths";
-import { getEmbedUrl, normalizeHttpUrl } from "@/lib/embed";
 import { formatRelative } from "@/lib/utils";
 import type {
+  ClassInfo,
   DiscussionCase,
+  ForumArgument,
   ForumComment,
+  ForumPeerReview,
   ForumPost,
   TeacherConclusion,
 } from "@/lib/types";
 
 type CaseItem = DiscussionCase & { id: string };
-
-const EMPTY_FORM = {
-  title: "",
-  articleUrl: "",
-  articleNote: "",
-  question: "",
-  decisionPrompt: "",
+type ForumEntry = (ForumArgument | ForumPost) & {
+  uid: string;
+  attemptId?: string;
 };
 
-function CaseForumViewer({ classId, c }: { classId: string; c: CaseItem }) {
-  const [posts, setPosts] = useState<Array<ForumPost & { uid: string }>>([]);
+function ForumViewer({
+  classId,
+  discussionCase,
+}: {
+  classId: string;
+  discussionCase: CaseItem;
+}) {
+  const [argumentsList, setArgumentsList] = useState<
+    Array<ForumArgument & { uid: string }>
+  >([]);
+  const [attemptArguments, setAttemptArguments] = useState<
+    Array<ForumArgument & { uid: string; attemptId: string }>
+  >([]);
+  const [legacyPosts, setLegacyPosts] = useState<
+    Array<ForumPost & { uid: string }>
+  >([]);
   const [comments, setComments] = useState<ForumComment[]>([]);
-  useEffect(() => listenPosts(classId, c.id, setPosts), [classId, c.id]);
-  useEffect(() => listenComments(classId, c.id, setComments), [classId, c.id]);
+  const [peerReviews, setPeerReviews] = useState<
+    Record<string, Record<string, ForumPeerReview>>
+  >({});
+  const [attemptPeerReviews, setAttemptPeerReviews] = useState<
+    Record<string, Record<string, Record<string, ForumPeerReview>>>
+  >({});
+
+  useEffect(
+    () => listenArguments(classId, discussionCase.id, setArgumentsList),
+    [classId, discussionCase.id]
+  );
+  useEffect(
+    () =>
+      listenArgumentAttempts(
+        classId,
+        discussionCase.id,
+        setAttemptArguments
+      ),
+    [classId, discussionCase.id]
+  );
+  useEffect(
+    () => listenPosts(classId, discussionCase.id, setLegacyPosts),
+    [classId, discussionCase.id]
+  );
+  useEffect(
+    () => listenComments(classId, discussionCase.id, setComments),
+    [classId, discussionCase.id]
+  );
+  useEffect(
+    () =>
+      listen<Record<string, Record<string, ForumPeerReview>>>(
+        P.peerReviews(classId, discussionCase.id),
+        (value) => setPeerReviews(value ?? {})
+      ),
+    [classId, discussionCase.id]
+  );
+  useEffect(
+    () =>
+      listen<Record<string, Record<string, Record<string, ForumPeerReview>>>>(
+        P.peerReviewAttempts(classId, discussionCase.id),
+        (value) => setAttemptPeerReviews(value ?? {})
+      ),
+    [classId, discussionCase.id]
+  );
+
+  const entries = useMemo<ForumEntry[]>(
+    () =>
+      [...legacyPosts, ...argumentsList, ...attemptArguments].sort(
+        (a, b) => a.submittedAt - b.submittedAt
+      ),
+    [argumentsList, attemptArguments, legacyPosts]
+  );
+  const reviews = [
+    ...Object.values(peerReviews).flatMap((value) => Object.values(value)),
+    ...Object.values(attemptPeerReviews).flatMap((attempts) =>
+      Object.values(attempts).flatMap((value) => Object.values(value))
+    ),
+  ];
+
+  if (!entries.length) {
+    return <p className="mt-3 text-sm text-slate-400">Belum ada argumen siswa.</p>;
+  }
 
   return (
-    <div className="mt-3 space-y-2.5 max-h-[420px] overflow-y-auto thin-scroll pr-1">
-      {posts.length === 0 ? (
-        <p className="text-sm text-slate-400">Belum ada CER dari siswa.</p>
-      ) : (
-        posts.map((p) => {
-          const pc = comments.filter((x) => x.targetStudentId === p.uid);
-          return (
-            <div key={p.uid} className="rounded-xl border border-slate-200 p-3.5">
-              <div className="flex items-center gap-2">
-                <Avatar name={p.studentName} size={26} />
-                <p className="text-sm font-bold text-slate-800">{p.studentName}</p>
-                <span className="text-[11px] text-slate-400 ml-auto">
-                  {formatRelative(p.submittedAt)}
-                </span>
+    <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto pr-1 thin-scroll">
+      {entries.map((entry) => {
+        const legacyComments = entry.attemptId
+          ? []
+          : comments.filter((item) => item.targetStudentId === entry.uid);
+        const receivedReviews = reviews.filter(
+          (item) =>
+            item.targetStudentId === entry.uid &&
+            (entry.attemptId
+              ? item.targetAttemptId === entry.attemptId
+              : !item.targetAttemptId)
+        );
+
+        return (
+          <div
+            key={`${entry.uid}-${entry.attemptId ?? "legacy"}-${entry.submittedAt}`}
+            className="rounded-xl border border-slate-200 p-3.5"
+          >
+            <div className="flex items-center gap-2">
+              <Avatar name={entry.studentName} size={28} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-800">
+                  {entry.studentName}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  {forumPostLabel(entry)} · {formatRelative(entry.submittedAt)}
+                </p>
               </div>
-              <div className="mt-2 space-y-1 text-sm">
-                <p><b className="text-brand-700">C:</b> <span className="text-slate-700">{p.claim}</span></p>
-                <p><b className="text-emerald-700">E:</b> <span className="text-slate-700">{p.evidence}</span></p>
-                <p><b className="text-amber-700">R:</b> <span className="text-slate-700">{p.reasoning}</span></p>
-              </div>
-              {pc.length > 0 && (
-                <div className="mt-2 border-t border-slate-100 pt-1.5">
-                  {pc.map((cm) => (
-                    <p key={cm.id} className="text-xs text-slate-600 mt-1">
-                      <MessageCircle className="h-3 w-3 inline mr-1 text-brand-500" />
-                      <b>{cm.authorName}:</b> {cm.text}
-                    </p>
-                  ))}
-                </div>
+              {entry.attemptId && (
+                <Badge tone="sky">Versi jawaban</Badge>
               )}
             </div>
-          );
-        })
-      )}
-      {comments.filter((x) => !x.targetStudentId).length > 0 && (
-        <div className="rounded-xl border border-slate-200 p-3">
-          <p className="text-xs font-bold text-slate-500 mb-1">Tanggapan umum</p>
-          {comments
-            .filter((x) => !x.targetStudentId)
-            .map((cm) => (
-              <p key={cm.id} className="text-xs text-slate-600 mt-0.5">
-                <b>{cm.authorName}:</b> {cm.text}
-              </p>
+            <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+              {forumPostBody(entry)}
+            </p>
+            {[
+              ...legacyComments.map((item) => ({
+                id: item.id ?? `${item.authorId}-${item.createdAt}`,
+                author: item.authorName,
+                difference: "Tanggapan CER historis",
+                response: item.text,
+              })),
+              ...receivedReviews.map((item) => ({
+                id: `${item.reviewerId}-${item.attemptId ?? "legacy"}-${item.targetStudentId}-${item.createdAt}`,
+                author: item.reviewerName || "Siswa",
+                difference: item.differenceReason,
+                response: item.response,
+              })),
+            ].map((item) => (
+              <div
+                key={item.id}
+                className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-600"
+              >
+                <p className="font-bold">
+                  <MessageCircle className="mr-1 inline h-3 w-3 text-brand-500" />
+                  {item.author}
+                </p>
+                <p className="mt-1">
+                  <b>Perbedaan:</b> {item.difference}
+                </p>
+                <p className="mt-1">
+                  <b>Tanggapan:</b> {item.response}
+                </p>
+              </div>
             ))}
-        </div>
-      )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export default function TeacherDiscussionPage() {
   const { classId } = useParams<{ classId: string }>();
+  const router = useRouter();
   const { toast } = useToast();
+  const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
   const [cases, setCases] = useState<CaseItem[] | null>(null);
   const [conclusion, setConclusion] = useState<TeacherConclusion | null>(null);
   const [conclusionText, setConclusionText] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<CaseItem | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [viewCase, setViewCase] = useState<string | null>(null);
 
-  useEffect(() => listenAllCases(classId, setCases), [classId]);
+  useEffect(() => {
+    void ensureDefaultDiscussionCases(classId).catch(() => undefined);
+    return listenAllCases(classId, setCases);
+  }, [classId]);
+  useEffect(
+    () => listen<ClassInfo>(P.class(classId), setClassInfo),
+    [classId]
+  );
   useEffect(
     () =>
-      listen<TeacherConclusion>(P.conclusion(classId), (c) => {
-        setConclusion(c);
-        if (c) setConclusionText(c.content);
+      listen<TeacherConclusion>(P.conclusion(classId), (value) => {
+        setConclusion(value);
+        if (value) setConclusionText(value.content);
       }),
     [classId]
   );
+  useEffect(() => {
+    if (!cases) return;
+    void syncPublishedCaseProjection(classId, cases).catch(() => undefined);
+  }, [cases, classId]);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormOpen(true);
-  };
-  const openEdit = (c: CaseItem) => {
-    setEditing(c);
-    setForm({
-      title: c.title,
-      articleUrl: c.articleUrl,
-      articleNote: c.articleNote ?? "",
-      question: c.question,
-      decisionPrompt: c.decisionPrompt,
-    });
-    setFormOpen(true);
+  const activeCases = (cases ?? []).filter((item) => !item.archivedAt);
+  const archivedCases = (cases ?? []).filter((item) => item.archivedAt);
+  const editorBase = `/teacher/classes/${classId}/discussion/cases`;
+
+  const openCreate = () => router.push(`${editorBase}/new`);
+
+  const openEdit = (discussionCase: CaseItem) => {
+    router.push(`${editorBase}/${encodeURIComponent(discussionCase.id)}`);
   };
 
-  const saveCase = async () => {
-    const normalizedArticleUrl = normalizeHttpUrl(form.articleUrl);
-    if (!normalizedArticleUrl) {
-      toast("Link artikel tidak valid.", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      const normalizedForm = { ...form, articleUrl: normalizedArticleUrl };
-      if (editing) {
-        await update(ref(db, P.caseItem(classId, editing.id)), {
-          ...normalizedForm,
-          updatedAt: Date.now(),
-        });
-        toast("Kasus diperbarui.", "success");
-      } else {
-        const r = push(ref(db, P.cases(classId)));
-        await set(r, {
-          ...normalizedForm,
-          published: false,
-          order: (cases?.length ?? 0) + 1,
-          createdAt: Date.now(),
-        });
-        toast("Kasus dibuat sebagai draft. Publikasikan saat siap.", "success");
-      }
-      setFormOpen(false);
-    } catch {
-      toast("Gagal menyimpan kasus.", "error");
-    } finally {
-      setBusy(false);
-    }
+  const restoreCase = async (discussionCase: CaseItem) => {
+    const restored = { ...discussionCase, published: false };
+    delete restored.archivedAt;
+    delete restored.archivedReason;
+    await saveDiscussionCase(classId, restored, discussionCase.id);
+    toast("Kasus dipulihkan sebagai draft.", "success");
   };
 
-  const togglePublish = async (c: CaseItem) => {
-    await update(ref(db, P.caseItem(classId, c.id)), {
-      published: !c.published,
-      updatedAt: Date.now(),
-    });
-    toast(
-      !c.published
-        ? "Kasus dipublikasikan — siswa kini dapat melihatnya di Modul 6."
-        : "Kasus disembunyikan dari siswa.",
-      "success"
-    );
+  const moveCase = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= activeCases.length) return;
+    const current = activeCases[index];
+    const other = activeCases[target];
+    await Promise.all([
+      saveDiscussionCase(
+        classId,
+        { ...current, order: other.order ?? target + 1 },
+        current.id
+      ),
+      saveDiscussionCase(
+        classId,
+        { ...other, order: current.order ?? index + 1 },
+        other.id
+      ),
+    ]);
   };
 
   const saveConclusion = async (publish: boolean) => {
-    if (conclusionText.trim().length < 20) {
-      toast("Kesimpulan minimal 20 karakter.", "error");
+    if (!conclusionText.trim()) {
+      toast("Isi kesimpulan guru terlebih dahulu.", "error");
       return;
     }
+
     setBusy(true);
     try {
+      const now = Date.now();
       await set(ref(db, P.conclusion(classId)), {
         content: conclusionText.trim(),
         published: publish,
-        updatedAt: Date.now(),
-        ...(publish ? { publishedAt: Date.now() } : {}),
+        updatedAt: now,
+        ...(publish ? { publishedAt: now } : {}),
       });
       toast(
         publish
-          ? "Kesimpulan dipublikasikan — Modul 6 siswa kini dapat dituntaskan."
+          ? "Kesimpulan guru dipublikasikan."
           : "Draft kesimpulan disimpan.",
         "success"
       );
@@ -215,132 +305,209 @@ export default function TeacherDiscussionPage() {
     }
   };
 
-  const formValid =
-    form.title.trim().length >= 3 &&
-    Boolean(getEmbedUrl(form.articleUrl)) &&
-    form.question.trim().length >= 10 &&
-    form.decisionPrompt.trim().length >= 10;
-
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-[220px]">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-[240px] flex-1">
           <Link
-            href={`/teacher/classes/${classId}`}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-brand-700"
+            href="/teacher/classes"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
           >
-            <ArrowLeft className="h-4 w-4" /> Kembali ke Kelas
+            <ArrowLeft className="h-4 w-4" /> Semua Kelas
           </Link>
-          <h1 className="text-2xl font-black text-slate-900 mt-1.5">Forum Diskusi</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Susun studi kasus (artikel + pertanyaan), pantau CER siswa, lalu
-            publikasikan kesimpulan.
+          <h1 className="mt-1.5 text-2xl font-black text-slate-900">
+            Forum Diskusi
+          </h1>
+          <p className="mt-1 text-sm font-bold text-brand-700">
+            {classInfo?.className ?? "Memuat kelas…"}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Kelola studi kasus Modul 5, lalu pantau argumen dan tanggapan siswa.
           </p>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" /> Buat Kasus
+          <Plus className="h-4 w-4" /> Buat Kasus Custom
         </Button>
       </div>
 
       {cases === null ? (
         <Spinner label="Memuat kasus…" />
-      ) : cases.length === 0 ? (
+      ) : activeCases.length === 0 ? (
         <Card>
           <EmptyState
-            emoji="📰"
-            title="Belum ada studi kasus"
-            desc="Buat kasus diskusi dengan tautan artikel dan pertanyaanmu sendiri. Siswa baru melihatnya setelah dipublikasikan."
+            emoji="🧪"
+            title="Belum ada studi kasus aktif"
+            desc="Kasus bawaan sedang disiapkan. Anda juga dapat membuat kasus custom."
             action={
               <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" /> Buat Kasus
+                <Plus className="h-4 w-4" /> Buat Kasus Custom
               </Button>
             }
           />
         </Card>
       ) : (
         <div className="space-y-4">
-          {cases.map((c, i) => (
-            <Card key={c.id}>
-              <CardHeader
-                title={
-                  <span className="flex items-center gap-2 flex-wrap">
-                    <Badge tone="blue">Kasus {i + 1}</Badge> {c.title}
-                    <Badge tone={c.published ? "green" : "amber"}>
-                      {c.published ? "Terpublikasi" : "Draft"}
-                    </Badge>
-                  </span>
-                }
-                subtitle={c.question}
-                action={
-                  <div className="flex gap-1.5">
-                    <Button size="sm" variant="secondary" onClick={() => openEdit(c)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={c.published ? "secondary" : "primary"}
-                      onClick={() => void togglePublish(c)}
-                    >
-                      {c.published ? (
-                        <>
-                          <EyeOff className="h-3.5 w-3.5" /> Sembunyikan
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="h-3.5 w-3.5" /> Publikasikan
-                        </>
+          {activeCases.map((discussionCase, index) => {
+            const issues = casePublishIssues(discussionCase);
+            return (
+              <Card key={discussionCase.id}>
+                <CardHeader
+                  title={
+                    <span className="flex flex-wrap items-center gap-2">
+                      <Badge tone="blue">Kasus {index + 1}</Badge>
+                      {discussionCase.title}
+                      {discussionCase.defaultKey && (
+                        <Badge tone="slate">Kasus Bawaan</Badge>
                       )}
-                    </Button>
+                      <Badge tone={discussionCase.published ? "green" : "amber"}>
+                        {discussionCase.published ? "Terbit" : "Draft"}
+                      </Badge>
+                    </span>
+                  }
+                  subtitle={
+                    discussionCase.phenomenonQuestion ?? discussionCase.question
+                  }
+                  action={
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={index === 0}
+                        aria-label="Naikkan urutan"
+                        onClick={() => void moveCase(index, -1)}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={index === activeCases.length - 1}
+                        aria-label="Turunkan urutan"
+                        onClick={() => void moveCase(index, 1)}
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openEdit(discussionCase)}
+                      >
+                        <Settings2 className="h-4 w-4" /> Kelola Kasus
+                      </Button>
+                    </div>
+                  }
+                />
+                <CardBody>
+                  {!discussionCase.published && issues.length > 0 && (
+                    <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <b>Belum lengkap untuk terbit:</b> {issues.join(", ")}.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                    <span>
+                      {discussionCase.scientificEvidence?.length ?? 0} bukti ilmiah
+                    </span>
+                    <span>
+                      {discussionCase.socioeconomicEvidence?.length ?? 0} bukti
+                      sosial-ekonomi
+                    </span>
+                    <span>
+                      {discussionCase.stakeholderPerspectives?.length ?? 0}{" "}
+                      perspektif contoh
+                    </span>
                   </div>
-                }
-              />
-              <CardBody>
-                <a
-                  href={c.articleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:underline"
-                >
-                  <ExternalLink className="h-4 w-4" /> {c.articleUrl}
-                </a>
-                <p className="mt-2 text-xs text-slate-500">
-                  <b>Decision prompt:</b> {c.decisionPrompt}
-                </p>
-                <button
-                  type="button"
-                  className="mt-3 text-sm font-semibold text-brand-600 hover:underline"
-                  onClick={() => setViewCase(viewCase === c.id ? null : c.id)}
-                >
-                  {viewCase === c.id ? "▲ Tutup forum" : "▼ Lihat CER & tanggapan siswa"}
-                </button>
-                {viewCase === c.id && <CaseForumViewer classId={classId} c={c} />}
-              </CardBody>
-            </Card>
-          ))}
+                  <button
+                    type="button"
+                    className="mt-4 text-sm font-semibold text-brand-600 hover:underline"
+                    onClick={() =>
+                      setViewCase(
+                        viewCase === discussionCase.id ? null : discussionCase.id
+                      )
+                    }
+                  >
+                    {viewCase === discussionCase.id
+                      ? "▲ Tutup respons"
+                      : "▼ Lihat argumen & tanggapan siswa"}
+                  </button>
+                  {viewCase === discussionCase.id && (
+                    <ForumViewer
+                      classId={classId}
+                      discussionCase={discussionCase}
+                    />
+                  )}
+                </CardBody>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* teacher conclusion */}
+      {archivedCases.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Arsip Kasus"
+            subtitle="Kasus dengan respons tidak dihapus agar riwayat siswa tetap utuh."
+          />
+          <CardBody className="space-y-2">
+            {archivedCases.map((discussionCase) => (
+              <div
+                key={discussionCase.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-3"
+              >
+                <Archive className="h-4 w-4 text-slate-400" />
+                <span className="flex-1 text-sm font-semibold text-slate-700">
+                  {discussionCase.title}
+                </span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void restoreCase(discussionCase)}
+                >
+                  <RotateCcw className="h-4 w-4" /> Pulihkan sebagai Draft
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setViewCase(
+                      viewCase === discussionCase.id ? null : discussionCase.id
+                    )
+                  }
+                >
+                  Lihat riwayat
+                </Button>
+                {viewCase === discussionCase.id && (
+                  <div className="w-full">
+                    <ForumViewer
+                      classId={classId}
+                      discussionCase={discussionCase}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader
           title="Kesimpulan Guru"
-          subtitle="Dipublikasikan ke seluruh siswa; menjadi syarat penuntasan Modul 6."
+          subtitle="Tetap menjadi prasyarat bagian penutup Modul 5."
           action={
-            conclusion?.published ? (
-              <Badge tone="green">Terpublikasi</Badge>
-            ) : (
-              <Badge tone="amber">Belum dipublikasi</Badge>
-            )
+            <Badge tone={conclusion?.published ? "green" : "amber"}>
+              {conclusion?.published ? "Terbit" : "Draft"}
+            </Badge>
           }
         />
         <CardBody className="space-y-3">
           <Textarea
             rows={5}
             value={conclusionText}
-            onChange={(e) => setConclusionText(e.target.value)}
-            placeholder="Rangkum jalannya diskusi, luruskan miskonsepsi, dan berikan kesimpulan ilmiah akhir untuk seluruh kasus…"
+            onChange={(event) => setConclusionText(event.target.value)}
+            placeholder="Rangkum diskusi, luruskan miskonsepsi, dan berikan kesimpulan ilmiah…"
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <Button
               variant="secondary"
               loading={busy}
@@ -349,85 +516,11 @@ export default function TeacherDiscussionPage() {
               Simpan Draft
             </Button>
             <Button loading={busy} onClick={() => void saveConclusion(true)}>
-              <Send className="h-4 w-4" />
-              {conclusion?.published ? "Perbarui Publikasi" : "Publikasikan"}
+              <Send className="h-4 w-4" /> Publikasikan
             </Button>
           </div>
         </CardBody>
       </Card>
-
-      {/* case form modal */}
-      <Modal
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title={editing ? "Edit Kasus" : "Buat Kasus Diskusi"}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)}>
-              Batal
-            </Button>
-            <Button loading={busy} disabled={!formValid} onClick={() => void saveCase()}>
-              {editing ? "Simpan Perubahan" : "Buat Kasus"}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div>
-            <Label>Judul Kasus</Label>
-            <Input
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="cth: Penyimpanan Makanan & Laju Reaksi"
-            />
-          </div>
-          <div>
-            <Label>Link Artikel</Label>
-            <Input
-              value={form.articleUrl}
-              onChange={(e) => setForm({ ...form, articleUrl: e.target.value })}
-              placeholder="https://…"
-            />
-            <Help>Gunakan artikel berita/sains yang relevan dengan laju reaksi.</Help>
-            {getEmbedUrl(form.articleUrl) && (
-              <div className="mt-2">
-                <EmbeddedLink
-                  url={form.articleUrl}
-                  title="Pratinjau link artikel"
-                  className="h-56 sm:h-64"
-                />
-              </div>
-            )}
-          </div>
-          <div>
-            <Label>Catatan Pengantar (opsional)</Label>
-            <Textarea
-              rows={2}
-              value={form.articleNote}
-              onChange={(e) => setForm({ ...form, articleNote: e.target.value })}
-              placeholder="Konteks singkat sebelum siswa membaca artikel…"
-            />
-          </div>
-          <div>
-            <Label>Pertanyaan Diskusi</Label>
-            <Textarea
-              rows={2}
-              value={form.question}
-              onChange={(e) => setForm({ ...form, question: e.target.value })}
-              placeholder="Pertanyaan yang dijawab siswa dengan format CER…"
-            />
-          </div>
-          <div>
-            <Label>Decision Prompt</Label>
-            <Textarea
-              rows={2}
-              value={form.decisionPrompt}
-              onChange={(e) => setForm({ ...form, decisionPrompt: e.target.value })}
-              placeholder="cth: Sebagai kepala dapur, keputusan apa yang kamu ambil dan mengapa?"
-            />
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

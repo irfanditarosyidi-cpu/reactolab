@@ -1,6 +1,7 @@
 "use client";
 
-// Module 6 — Forum Diskusi Ilmiah CER (PRD §24).
+// Module 5 — Aplikasi Konsep. Legacy CER components remain here only so old
+// records can still be rendered; the active case flow lives in Module5CaseFlow.
 // Submit-to-reveal: forum feed only becomes visible after the student's own
 // CER is submitted (also enforced by RTDB security rules).
 
@@ -63,25 +64,26 @@ export function M6Intro({ sec, readOnly }: SectionProps) {
     <div>
       <div className="rounded-xl bg-brand-50 border border-brand-100 p-4 text-sm text-slate-700 leading-relaxed space-y-2">
         <p>
-          Selamat datang di <b>Forum Diskusi Ilmiah</b>! Kali ini kamu akan menggunakan
-          hasil penyelidikanmu untuk menanggapi kasus nyata dengan format{" "}
-          <b>CER (Claim–Evidence–Reasoning)</b>:
+          Selamat datang di <b>Forum Diskusi Berbasis Studi Kasus</b>. Kamu akan
+          menerapkan konsep laju reaksi untuk mengkaji persoalan keselamatan industri
+          dan dampak sosial-ekonominya.
         </p>
         <ul className="space-y-1">
           <li>
-            • <b>Claim</b> — pernyataan/pendapatmu terhadap pertanyaan kasus.
+            • Merumuskan pertanyaan dan hipotesismu sendiri.
           </li>
           <li>
-            • <b>Evidence</b> — bukti/data (dari artikel maupun eksperimenmu).
+            • Memilih bukti ilmiah serta sosial-ekonomi, atau menambahkan sumbermu sendiri.
           </li>
           <li>
-            • <b>Reasoning</b> — penalaran ilmiah yang menghubungkan bukti dengan
-            claim.
+            • Menguji hipotesis, membandingkan dua sudut pandang teman, dan menyusun
+            keputusan berbasis bukti.
           </li>
         </ul>
         <p>
-          Setelah mengirim pendapatmu, kamu baru bisa melihat pendapat teman dan wajib
-          memberi minimal satu tanggapan.
+          Argumen teman baru terlihat setelah argumen awalmu berhasil disimpan. Setiap
+          kasus selesai saat keputusanmu tersimpan; setelah seluruh kasus selesai, kamu
+          dapat membaca kesimpulan guru.
         </p>
       </div>
       {!readOnly && (
@@ -97,7 +99,7 @@ export function M6Intro({ sec, readOnly }: SectionProps) {
             }
           }}
         >
-          Mulai Diskusi
+          Mulai Studi Kasus
         </Button>
       )}
     </div>
@@ -492,6 +494,7 @@ export function M6Cases({ sec, readOnly }: SectionProps) {
   const {
     classId,
     uid,
+    moduleId,
     studentName,
     drafts,
     updateDraft,
@@ -619,7 +622,7 @@ export function M6Cases({ sec, readOnly }: SectionProps) {
     try {
       patchCase(discussionCase, nextDraft);
       await updatePaths({
-        [`${P.sectionResponse(classId, uid, 6, sec.id)}/${discussionCase.id}`]:
+        [`${P.sectionResponse(classId, uid, moduleId, sec.id)}/${discussionCase.id}`]:
           nextDraft,
         [`${P.discussionProgress(classId, uid)}/${discussionCase.id}/decisionAt`]:
           submittedAt,
@@ -1030,7 +1033,7 @@ export function M6Conclusion({ sec, readOnly }: SectionProps) {
                 }
               }}
             >
-              Selesaikan Modul 6
+              Selesaikan Modul 5
             </Button>
           )}
         </>

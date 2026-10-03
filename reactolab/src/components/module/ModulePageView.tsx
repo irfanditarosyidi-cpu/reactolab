@@ -76,7 +76,7 @@ export default function ModulePageView() {
             index={i + 1}
             title={s.title}
             status={status}
-            defaultOpen={moduleId === 6 && s.id === "sectionCases"}
+            defaultOpen={moduleId === 5 && s.id === "sectionCases"}
           >
             {renderSection(s, status === "completed")}
           </SectionCard>
@@ -91,12 +91,12 @@ export default function ModulePageView() {
             Modul {moduleId} Selesai!
           </h2>
           <p className="mt-1 text-sm text-emerald-800">
-            {moduleId === 7
+            {moduleId === 6
               ? "Seluruh rangkaian pembelajaran ChemSpace telah kamu tuntaskan."
               : "Kamu bebas memilih: lanjut sekarang, atau berhenti dulu dan lanjutkan di sesi berikutnya."}
           </p>
           <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-            {moduleId === 7 ? (
+            {moduleId === 6 ? (
               <Button size="lg" onClick={() => void engine.exitToDashboard()}>
                 <Home className="h-4 w-4" /> Kembali ke Dashboard
               </Button>

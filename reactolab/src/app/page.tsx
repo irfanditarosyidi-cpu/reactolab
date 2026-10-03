@@ -67,8 +67,8 @@ const FEATURES = [
   },
   {
     icon: Users,
-    title: "Forum Ilmiah CER",
-    desc: "Bangun argumen berbasis Claim, Evidence, dan Reasoning dari kasus yang diberikan guru.",
+    title: "Aplikasi Konsep",
+    desc: "Kajilah kasus industri, uji hipotesis dengan bukti, bandingkan perspektif, lalu usulkan kebijakan.",
     tone: "from-pink-500 to-violet-500",
   },
   {
@@ -101,7 +101,7 @@ const LEARNING_STEPS = [
   {
     no: "04",
     title: "Analisis & komunikasikan",
-    desc: "Baca grafik, uji hipotesis, simpulkan, lalu pertahankan argumen dengan format CER.",
+    desc: "Baca grafik, uji hipotesis, simpulkan, lalu pertahankan argumen berbasis bukti.",
     icon: BarChart3,
   },
 ];

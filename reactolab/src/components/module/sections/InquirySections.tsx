@@ -83,6 +83,32 @@ function CompleteBar({
   );
 }
 
+function ContinueDespiteScaffoldWarning({
+  show,
+  onContinue,
+}: {
+  show: boolean;
+  onContinue: () => Promise<void>;
+}) {
+  if (!show) return null;
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t border-amber-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs text-amber-800">
+        Ini hanya peringatan scaffolding. Kamu tetap dapat melanjutkan tanpa
+        mengubah jawaban.
+      </p>
+      <Button
+        size="sm"
+        variant="secondary"
+        className="shrink-0"
+        onClick={() => void onContinue()}
+      >
+        Tetap lanjutkan
+      </Button>
+    </div>
+  );
+}
+
 // ---------- Section 1: Orientasi ----------
 
 export function OrientationSection({ sec, readOnly }: SectionProps) {
@@ -163,10 +189,9 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
   const answerKey = `${normalizeProblemAnswer(independentValue)}|${normalizeProblemAnswer(
     dependentValue
   )}`;
-  const feedback =
-    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const feedback = scaffoldingEnabled ? checked?.result ?? null : null;
   const canAttempt =
-    independentValue.trim().length >= 3 && dependentValue.trim().length >= 3;
+    independentValue.trim().length > 0 && dependentValue.trim().length > 0;
 
   const continueIfValid = async () => {
     if (!scaffoldingEnabled) {
@@ -187,7 +212,6 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
     );
     setAttempts(nextAttempt);
     setChecked({ answerKey, result });
-    if (result.valid) await completeSection(sec.id);
   };
 
   return (
@@ -264,12 +288,17 @@ export function ProblemSection({ sec, readOnly }: SectionProps) {
                   })}
                 </div>
               )}
+              <ContinueDespiteScaffoldWarning
+                show
+                onContinue={() => completeSection(sec.id)}
+              />
             </div>
           )}
 
           <CompleteBar
             valid={canAttempt}
             onComplete={continueIfValid}
+            label={scaffoldingEnabled ? "Periksa" : "Simpan & Lanjut"}
             hint="Lengkapi kedua bagian rumusan masalah untuk melanjutkan."
           />
         </>
@@ -303,12 +332,11 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
   const answerKey = [directionValue, effectValue, reasonValue]
     .map(normalizeHypothesisAnswer)
     .join("|");
-  const feedback =
-    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
+  const feedback = scaffoldingEnabled ? checked?.result ?? null : null;
   const canAttempt =
-    directionValue.trim().length >= 3 &&
-    effectValue.trim().length >= 3 &&
-    reasonValue.trim().length >= 10;
+    directionValue.trim().length > 0 &&
+    effectValue.trim().length > 0 &&
+    reasonValue.trim().length > 0;
 
   const continueIfValid = async () => {
     if (!scaffoldingEnabled) {
@@ -331,7 +359,6 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
     );
     setAttempts(nextAttempt);
     setChecked({ answerKey, result });
-    if (result.valid) await completeSection(sec.id);
   };
 
   return (
@@ -404,6 +431,10 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
               );
             })}
           </div>
+          <ContinueDespiteScaffoldWarning
+            show
+            onContinue={() => completeSection(sec.id)}
+          />
         </div>
       )}
 
@@ -411,6 +442,7 @@ export function HypothesisSection({ sec, readOnly }: SectionProps) {
         <CompleteBar
           valid={canAttempt}
           onComplete={continueIfValid}
+          label={scaffoldingEnabled ? "Periksa" : "Simpan & Lanjut"}
           hint="Isi arah perubahan, dampak, dan alasan ilmiah untuk melanjutkan."
         />
       )}
@@ -447,9 +479,8 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
   const answerKey = `${d.verdict ?? ""}|${normalizeProblemAnswer(
     explanationValue
   )}`;
-  const feedback =
-    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
-  const canAttempt = Boolean(d.verdict && explanationValue.trim().length >= 10);
+  const feedback = scaffoldingEnabled ? checked?.result ?? null : null;
+  const canAttempt = Boolean(d.verdict && explanationValue.trim().length > 0);
 
   const continueIfValid = async () => {
     if (!scaffoldingEnabled) {
@@ -472,7 +503,6 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
     );
     setAttempts(nextAttempt);
     setChecked({ answerKey, result });
-    if (result.valid) await completeSection(sec.id);
   };
 
   // Generic ordering so Module 1's student-defined concentrations appear too.
@@ -582,6 +612,10 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
               );
             })}
           </div>
+          <ContinueDespiteScaffoldWarning
+            show
+            onContinue={() => completeSection(sec.id)}
+          />
         </div>
       )}
 
@@ -589,6 +623,7 @@ export function HypoTestSection({ sec, readOnly }: SectionProps) {
         <CompleteBar
           valid={canAttempt}
           onComplete={continueIfValid}
+          label={scaffoldingEnabled ? "Periksa" : "Simpan & Lanjut"}
           hint="Pilih kesimpulan uji dan tulis penjelasannya."
         />
       )}
@@ -617,9 +652,8 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
   } | null>(null);
   const conclusionValue = d.text ?? "";
   const answerKey = normalizeProblemAnswer(conclusionValue);
-  const feedback =
-    scaffoldingEnabled && checked?.answerKey === answerKey ? checked.result : null;
-  const textOk = conclusionValue.trim().length >= 30;
+  const feedback = scaffoldingEnabled ? checked?.result ?? null : null;
+  const textOk = conclusionValue.trim().length > 0;
   const canAttempt = textOk && (!isFinalize || Boolean(d.confirmFinal));
 
   const continueIfValid = async () => {
@@ -648,7 +682,6 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
     );
     setAttempts(nextAttempt);
     setChecked({ answerKey, result });
-    if (result.valid) await completeSection(sec.id);
   };
 
   return (
@@ -667,8 +700,8 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
           aria-invalid={Boolean(feedback && !feedback.valid)}
         />
         <Help>
-          Kesimpulan yang baik menyebut pola data DAN penjelasan partikelnya (≥ 30
-          karakter).
+          Kesimpulan yang baik menyebut pola data dan penjelasan partikelnya.
+          Scaffolding akan memberi saran jika bagian tersebut belum terlihat.
         </Help>
       </div>
 
@@ -703,6 +736,10 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
               );
             })}
           </div>
+          <ContinueDespiteScaffoldWarning
+            show
+            onContinue={() => completeSection(sec.id)}
+          />
         </div>
       )}
 
@@ -732,11 +769,17 @@ export function ConclusionSection({ sec, readOnly }: SectionProps) {
         <CompleteBar
           valid={canAttempt}
           onComplete={continueIfValid}
-          label={isFinalize ? "Selesaikan & Finalisasi LKPD" : "Simpan & Lanjut"}
+          label={
+            scaffoldingEnabled
+              ? "Periksa"
+              : isFinalize
+                ? "Selesaikan & Finalisasi LKPD"
+                : "Simpan & Lanjut"
+          }
           hint={
             isFinalize
               ? "Tulis kesimpulan dan centang persetujuan finalisasi."
-              : "Tulis kesimpulan minimal 30 karakter."
+              : "Isi kesimpulan untuk melanjutkan."
           }
         />
       )}

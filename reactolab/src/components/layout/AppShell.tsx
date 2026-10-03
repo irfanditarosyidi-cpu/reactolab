@@ -42,20 +42,8 @@ const NAV: Record<Role, NavItem[]> = {
   ],
   teacher: [
     { href: "/teacher/dashboard", label: "Dashboard Guru", icon: LayoutDashboard },
+    { href: "/teacher/teaching-materials", label: "Bahan Ajar", icon: BookOpen },
     { href: "/teacher/classes", label: "Kelas", icon: Users },
-    { href: "/teacher/practice", label: "Latihan Soal", icon: ClipboardList },
-    {
-      href: "/teacher/orientation-videos",
-      label: "Video Orientasi",
-      icon: Clapperboard,
-    },
-    {
-      href: "/teacher/scaffolding",
-      label: "Scaffolding",
-      icon: SlidersHorizontal,
-    },
-    { href: "/teacher/monitoring", label: "Monitoring Siswa", icon: MonitorCheck },
-    { href: "/teacher/discussion", label: "Forum Diskusi", icon: MessagesSquare },
     { href: "/teacher/settings", label: "Settings", icon: Settings },
   ],
   admin: [
@@ -76,6 +64,15 @@ const NAV: Record<Role, NavItem[]> = {
   ],
 };
 
+const TEACHER_CLASS_NAV = [
+  { segment: "", label: "Informasi Kelas", icon: LayoutDashboard },
+  { segment: "monitoring", label: "Monitoring Siswa", icon: MonitorCheck },
+  { segment: "discussion", label: "Forum Diskusi", icon: MessagesSquare },
+  { segment: "practice", label: "Latihan Soal", icon: ClipboardList },
+  { segment: "scaffolding", label: "Scaffolding", icon: SlidersHorizontal },
+  { segment: "orientation-videos", label: "Video Orientasi", icon: Clapperboard },
+];
+
 const ROLE_LABEL: Record<Role, string> = {
   student: "Siswa",
   teacher: "Guru",
@@ -85,50 +82,31 @@ const ROLE_LABEL: Record<Role, string> = {
 function isNavItemActive(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
   if (pathname === href) return true;
-
-  // Teacher special sub-route handling:
-  // Monitoring can be /teacher/monitoring or /teacher/classes/[classId]/monitoring
-  if (href === "/teacher/monitoring") {
-    return (
-      pathname.startsWith("/teacher/monitoring/") ||
-      /\/teacher\/classes\/[^/]+\/monitoring(\/.*)?$/.test(pathname)
-    );
-  }
-
-  // Forum Diskusi can be /teacher/discussion or /teacher/classes/[classId]/discussion
-  if (href === "/teacher/discussion") {
-    return (
-      pathname.startsWith("/teacher/discussion/") ||
-      /\/teacher\/classes\/[^/]+\/discussion(\/.*)?$/.test(pathname)
-    );
-  }
-
-  // Practice settings can be opened from the global picker or a class detail.
-  if (href === "/teacher/practice") {
-    return (
-      pathname.startsWith("/teacher/practice/") ||
-      /\/teacher\/classes\/[^/]+\/practice(\/.*)?$/.test(pathname)
-    );
-  }
-
-  if (href === "/teacher/scaffolding") {
-    return (
-      pathname.startsWith("/teacher/scaffolding/") ||
-      /\/teacher\/classes\/[^/]+\/scaffolding(\/.*)?$/.test(pathname)
-    );
-  }
-
-  // Kelas should NOT be active when viewing a feature under a class.
-  if (href === "/teacher/classes") {
-    if (
-      /\/teacher\/classes\/[^/]+\/(monitoring|discussion|practice|scaffolding)(\/.*)?$/.test(pathname)
-    ) {
-      return false;
-    }
-    return pathname.startsWith("/teacher/classes/");
-  }
-
   return pathname.startsWith(href + "/");
+}
+
+function teacherClassIdFromPath(pathname: string | null): string | null {
+  if (!pathname) return null;
+  return pathname.match(/^\/teacher\/classes\/([^/]+)(?:\/|$)/)?.[1] ?? null;
+}
+
+function isTeacherClassNavActive(
+  pathname: string | null,
+  classId: string,
+  href: string
+): boolean {
+  if (!pathname) return false;
+  const base = `/teacher/classes/${classId}`;
+  if (href === base) {
+    return pathname === base;
+  }
+  if (href === `${base}/monitoring`) {
+    return (
+      pathname.startsWith(`${base}/monitoring`) ||
+      pathname.startsWith(`${base}/students`)
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export default function AppShell({
@@ -142,8 +120,17 @@ export default function AppShell({
   const router = useRouter();
   const { profile, logout } = useAuth();
   const [open, setOpen] = useState(false);
-
-  const nav = NAV[role];
+  const activeClassId =
+    role === "teacher" ? teacherClassIdFromPath(pathname) : null;
+  const nav: NavItem[] = activeClassId
+    ? TEACHER_CLASS_NAV.map((item) => ({
+        href: item.segment
+          ? `/teacher/classes/${activeClassId}/${item.segment}`
+          : `/teacher/classes/${activeClassId}`,
+        label: item.label,
+        icon: item.icon,
+      }))
+    : NAV[role];
 
   const sidebar = (
     <div className="flex flex-col h-full">
@@ -160,7 +147,9 @@ export default function AppShell({
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {nav.map((item) => {
-          const active = isNavItemActive(pathname, item.href);
+          const active = activeClassId
+            ? isTeacherClassNavActive(pathname, activeClassId, item.href)
+            : isNavItemActive(pathname, item.href);
           const Icon = item.icon;
           return (
             <Link

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:discussion": "tsc scripts/discussion-flow.test.ts src/lib/discussion.ts src/lib/discussion-templates.ts src/lib/types.ts --outDir out/discussion-tests --module commonjs --moduleResolution node --target es2020 --esModuleInterop --skipLibCheck && node --test out/discussion-tests/scripts/discussion-flow.test.js",
     "seed": "node scripts/seed.mjs"
   },
   "dependencies": {

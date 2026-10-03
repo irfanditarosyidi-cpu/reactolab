@@ -1,9 +1,10 @@
 "use client";
 
-// Module 5 — Konfirmasi Materi (PRD §23): rate concept + interactive graph,
-// rate equation, collision theory. All sections sequential, one page.
+// Teacher material — Konfirmasi Materi (PRD §23): rate concept + interactive
+// graph, rate equation, and collision theory.
 
 import { useMemo, useRef, useState } from "react";
+import { RotateCcw } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -22,9 +23,30 @@ import {
   BurningWoodCard,
   RustTimelapseCard,
 } from "@/components/student/LearningMissionMap";
-import { useEngine } from "../engine";
+import { useEngine, useOptionalEngine } from "../engine";
 import MCQ from "./MCQ";
-import type { SectionProps } from "./InquirySections";
+import type { SectionDef } from "@/lib/module-defs";
+
+interface MaterialSectionProps {
+  sec: Pick<SectionDef, "id">;
+  readOnly: boolean;
+}
+
+function useMaterialDraft(sectionId: string) {
+  const engine = useOptionalEngine();
+  const [localDraft, setLocalDraft] = useState<Record<string, unknown>>({});
+  const draft = engine?.drafts[sectionId] ?? localDraft;
+
+  const updateDraft = (patch: Record<string, unknown>) => {
+    if (engine) {
+      engine.updateDraft(sectionId, patch);
+      return;
+    }
+    setLocalDraft((current) => ({ ...current, ...patch }));
+  };
+
+  return { draft, engine, updateDraft };
+}
 
 function CompleteBtn({
   valid,
@@ -58,9 +80,8 @@ function CompleteBtn({
 
 // ---------- Section 1: Konsep Dasar + slider waktu ----------
 
-export function M5Concept({ sec, readOnly }: SectionProps) {
-  const { drafts, updateDraft } = useEngine();
-  const d = drafts[sec.id] ?? {};
+export function M5Concept({ sec, readOnly }: MaterialSectionProps) {
+  const { draft: d, engine, updateDraft } = useMaterialDraft(sec.id);
   const savedTime = typeof d.selectedTime === "number" ? d.selectedTime : 10;
   const savedInteractionCount =
     typeof d.interactionCount === "number" ? d.interactionCount : 0;
@@ -85,7 +106,7 @@ export function M5Concept({ sec, readOnly }: SectionProps) {
 
     interactionCountRef.current += 1;
     setHasInteracted(true);
-    updateDraft(sec.id, {
+    updateDraft({
       concept5_1Viewed: true,
       interactionCount: interactionCountRef.current,
       selectedTime: nextTime,
@@ -188,7 +209,7 @@ export function M5Concept({ sec, readOnly }: SectionProps) {
               ? "Pengamatan tersimpan. Kamu dapat melanjutkan ke materi berikutnya."
               : "Geser slider waktu minimal satu kali untuk melanjutkan."}
           </Help>
-          <CompleteBtn valid={hasInteracted} secId={sec.id} />
+          {engine && <CompleteBtn valid={hasInteracted} secId={sec.id} />}
         </>
       )}
     </div>
@@ -278,9 +299,8 @@ function OrderGraphCard({
   );
 }
 
-export function M5Equation({ sec, readOnly }: SectionProps) {
-  const { drafts, updateDraft } = useEngine();
-  const d = drafts[sec.id] ?? {};
+export function M5Equation({ sec, readOnly }: MaterialSectionProps) {
+  const { draft: d, engine, updateDraft } = useMaterialDraft(sec.id);
   const answers = (d.quiz as Record<string, number>) ?? {};
   const allCorrect = M5_EQUATION_QUIZ.every((q, i) => answers[`q${i}`] === q.answer);
 
@@ -418,13 +438,23 @@ export function M5Equation({ sec, readOnly }: SectionProps) {
             item={q}
             chosen={answers[`q${i}`]}
             readOnly={readOnly}
-            onChoose={(c) => updateDraft(sec.id, { quiz: { ...answers, [`q${i}`]: c } })}
+            onChoose={(c) => updateDraft({ quiz: { ...answers, [`q${i}`]: c } })}
           />
         ))}
       </div>
+      {!engine && !readOnly && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={Object.keys(answers).length === 0}
+          onClick={() => updateDraft({ quiz: {} })}
+        >
+          <RotateCcw className="h-4 w-4" /> Reset Kuis
+        </Button>
+      )}
       {!readOnly && (
         <>
-          <CompleteBtn valid={allCorrect} secId={sec.id} />
+          {engine && <CompleteBtn valid={allCorrect} secId={sec.id} />}
           {!allCorrect && (
             <p className="text-xs text-slate-400 mt-2">
               Jawab ketiga soal dengan benar untuk melanjutkan.
@@ -438,9 +468,8 @@ export function M5Equation({ sec, readOnly }: SectionProps) {
 
 // ---------- Section 3: Teori Tumbukan ----------
 
-export function M5Collision({ sec, readOnly }: SectionProps) {
-  const { drafts, updateDraft } = useEngine();
-  const d = drafts[sec.id] ?? {};
+export function M5Collision({ sec, readOnly }: MaterialSectionProps) {
+  const { draft: d, engine, updateDraft } = useMaterialDraft(sec.id);
   const answers = (d.quiz as Record<string, number>) ?? {};
   const allCorrect = M5_COLLISION_QUIZ.every((q, i) => answers[`q${i}`] === q.answer);
   const savedEnergy = typeof d.collisionEnergy === "number" ? d.collisionEnergy : 45;
@@ -456,12 +485,12 @@ export function M5Collision({ sec, readOnly }: SectionProps) {
 
   const changeEnergy = (nextEnergy: number) => {
     setEnergy(nextEnergy);
-    if (!readOnly) updateDraft(sec.id, { collisionEnergy: nextEnergy });
+    if (!readOnly) updateDraft({ collisionEnergy: nextEnergy });
   };
 
   const changeOrientation = (nextOrientation: number) => {
     setOrientation(nextOrientation);
-    if (!readOnly) updateDraft(sec.id, { collisionOrientation: nextOrientation });
+    if (!readOnly) updateDraft({ collisionOrientation: nextOrientation });
   };
 
   const resultExplanation = effective
@@ -607,14 +636,31 @@ export function M5Collision({ sec, readOnly }: SectionProps) {
             item={q}
             chosen={answers[`q${i}`]}
             readOnly={readOnly}
-            onChoose={(c) => updateDraft(sec.id, { quiz: { ...answers, [`q${i}`]: c } })}
+            onChoose={(c) => updateDraft({ quiz: { ...answers, [`q${i}`]: c } })}
           />
         ))}
       </div>
 
+      {!engine && !readOnly && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={Object.keys(answers).length === 0}
+          onClick={() => updateDraft({ quiz: {} })}
+        >
+          <RotateCcw className="h-4 w-4" /> Reset Kuis
+        </Button>
+      )}
+
       {!readOnly && (
         <>
-          <CompleteBtn valid={allCorrect} secId={sec.id} label="Selesaikan Modul 5" />
+          {engine && (
+            <CompleteBtn
+              valid={allCorrect}
+              secId={sec.id}
+              label="Selesaikan Materi"
+            />
+          )}
           {!allCorrect && (
             <p className="text-xs text-slate-400 mt-2">
               Jawab ketiga soal dengan benar untuk menyelesaikan modul.

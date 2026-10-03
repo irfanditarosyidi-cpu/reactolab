@@ -12,7 +12,12 @@ import Modal from "@/components/ui/Modal";
 import { Badge, EmptyState, Spinner } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/lib/auth-context";
-import { createClass, listenTeacherClasses, readOnce } from "@/lib/db";
+import {
+  createClass,
+  ensureDefaultDiscussionCases,
+  listenTeacherClasses,
+  readOnce,
+} from "@/lib/db";
 import { P } from "@/lib/paths";
 import { formatDateTime } from "@/lib/utils";
 import type { ClassInfo, ClassMembership } from "@/lib/types";
@@ -30,6 +35,13 @@ export default function TeacherClassesPage() {
     if (!user) return;
     return listenTeacherClasses(user.uid, setClasses);
   }, [user]);
+
+  useEffect(() => {
+    if (!classes) return;
+    void Promise.all(
+      classes.map((item) => ensureDefaultDiscussionCases(item.classId))
+    ).catch(() => undefined);
+  }, [classes]);
 
   useEffect(() => {
     if (!classes) return;
@@ -68,7 +80,7 @@ export default function TeacherClassesPage() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <h1 className="text-2xl font-black text-slate-900">Kelas Saya</h1>
+          <h1 className="text-2xl font-black text-slate-900">Daftar Kelas</h1>
           <p className="text-sm text-slate-500 mt-1">
             Buat kelas dan bagikan kode kepada siswa.
           </p>
@@ -98,7 +110,15 @@ export default function TeacherClassesPage() {
           {classes.map((c) => (
             <Card key={c.classId} className="hover:border-brand-300 transition-colors">
               <CardHeader
-                title={c.className}
+                title={
+                  <Link
+                    href={`/teacher/classes/${c.classId}`}
+                    title="Buka detail dan administrasi kelas"
+                    className="hover:text-brand-700 hover:underline"
+                  >
+                    {c.className}
+                  </Link>
+                }
                 subtitle={`Dibuat ${formatDateTime(c.createdAt)}`}
                 action={<Badge tone={c.status === "active" ? "green" : "slate"}>{c.status === "active" ? "Aktif" : "Arsip"}</Badge>}
               />
@@ -124,15 +144,10 @@ export default function TeacherClassesPage() {
                     <Users className="h-4 w-4" /> {counts[c.classId] ?? "…"} siswa
                   </span>
                 </div>
-                <div className="mt-4 flex gap-2">
-                  <Link href={`/teacher/classes/${c.classId}`} className="flex-1">
-                    <Button variant="secondary" full size="sm">
-                      Kelola
-                    </Button>
-                  </Link>
-                  <Link href={`/teacher/classes/${c.classId}/monitoring`} className="flex-1">
+                <div className="mt-4">
+                  <Link href={`/teacher/classes/${c.classId}`}>
                     <Button full size="sm">
-                      Monitoring
+                      Kelola Kelas
                     </Button>
                   </Link>
                 </div>

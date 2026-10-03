@@ -88,6 +88,14 @@
 
     "discussionCases": {
       "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || (root.child('classMemberships').child($classId).child(auth.uid).exists() && query.orderByChild == 'published' && query.equalTo == true))",
+        ".indexOn": ["published"],
+        ".write": "auth != null && root.child('classes').child($classId).child('teacherId').val() === auth.uid"
+      }
+    },
+
+    "publishedDiscussionCases": {
+      "$classId": {
         ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('classMemberships').child($classId).child(auth.uid).exists() || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && root.child('classes').child($classId).child('teacherId').val() === auth.uid"
       }
@@ -97,10 +105,40 @@
       "$classId": {
         ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         "$caseId": {
-          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && data.child(auth.uid).exists()",
+          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && (data.child(auth.uid).exists() || root.child('forumArguments').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumArgumentAttempts').child($classId).child($caseId).child(auth.uid).exists())",
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
             ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('classMemberships').child($classId).child(auth.uid).exists() && newData.child('claim').isString() && newData.child('evidence').isString() && newData.child('reasoning').isString()"
+          }
+        }
+      }
+    },
+
+    "forumArguments": {
+      "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$caseId": {
+          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && (data.child(auth.uid).exists() || root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumArgumentAttempts').child($classId).child($caseId).child(auth.uid).exists())",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('classMemberships').child($classId).child(auth.uid).exists() && root.child('discussionCases').child($classId).child($caseId).child('published').val() === true && !root.child('discussionCases').child($classId).child($caseId).child('archivedAt').exists()",
+            ".validate": "newData.hasChildren(['format', 'verdict', 'argument', 'studentName', 'submittedAt']) && newData.child('format').val() === 'hypothesis_argument' && (newData.child('verdict').val() === 'supported' || newData.child('verdict').val() === 'not_supported') && newData.child('argument').isString() && newData.child('studentName').isString() && newData.child('submittedAt').isNumber() && !newData.child('hypothesis').exists() && !newData.child('problemQuestion').exists() && !newData.child('evidenceSummary').exists() && !newData.child('evidenceRefs').exists()"
+          }
+        }
+      }
+    },
+
+    "forumArgumentAttempts": {
+      "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$caseId": {
+          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && (data.child(auth.uid).exists() || root.child('forumArguments').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists())",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            "$attemptId": {
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('classMemberships').child($classId).child(auth.uid).exists() && root.child('progress').child($classId).child(auth.uid).child('modules').child('5').child('attemptId').val() === $attemptId && root.child('discussionCases').child($classId).child($caseId).child('published').val() === true && !root.child('discussionCases').child($classId).child($caseId).child('archivedAt').exists()",
+              ".validate": "newData.hasChildren(['format', 'attemptId', 'verdict', 'argument', 'studentName', 'submittedAt']) && newData.child('format').val() === 'hypothesis_argument' && newData.child('attemptId').val() === $attemptId && (newData.child('verdict').val() === 'supported' || newData.child('verdict').val() === 'not_supported') && newData.child('argument').isString() && newData.child('studentName').isString() && newData.child('submittedAt').isNumber()"
+            }
           }
         }
       }
@@ -110,9 +148,41 @@
       "$classId": {
         ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         "$caseId": {
-          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists()",
+          ".read": "auth != null && root.child('classMemberships').child($classId).child(auth.uid).exists() && (root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumArguments').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumArgumentAttempts').child($classId).child($caseId).child(auth.uid).exists())",
           "$commentId": {
-            ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid && root.child('classMemberships').child($classId).child(auth.uid).exists() && root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists()"
+            ".write": "auth != null && !data.exists() && newData.child('authorId').val() === auth.uid && root.child('classMemberships').child($classId).child(auth.uid).exists() && (root.child('forumPosts').child($classId).child($caseId).child(auth.uid).exists() || root.child('forumArguments').child($classId).child($caseId).child(auth.uid).exists()) && (!newData.child('targetStudentId').exists() || (newData.child('targetStudentId').val() !== auth.uid && (root.child('forumPosts').child($classId).child($caseId).child(newData.child('targetStudentId').val()).exists() || root.child('forumArguments').child($classId).child($caseId).child(newData.child('targetStudentId').val()).exists())))"
+          }
+        }
+      }
+    },
+
+    "forumPeerReviews": {
+      "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$caseId": {
+          "$reviewerId": {
+            ".read": "auth != null && auth.uid === $reviewerId",
+            "$targetId": {
+              ".write": "auth != null && auth.uid === $reviewerId && $targetId !== $reviewerId && !data.exists() && root.child('classMemberships').child($classId).child(auth.uid).exists() && (root.child('forumPosts').child($classId).child($caseId).child($reviewerId).exists() || root.child('forumArguments').child($classId).child($caseId).child($reviewerId).exists()) && (root.child('forumPosts').child($classId).child($caseId).child($targetId).exists() || root.child('forumArguments').child($classId).child($caseId).child($targetId).exists())",
+              ".validate": "newData.hasChildren(['reviewerId', 'reviewerName', 'targetStudentId', 'targetName', 'differenceReason', 'response', 'createdAt']) && newData.child('reviewerId').val() === $reviewerId && newData.child('targetStudentId').val() === $targetId && newData.child('reviewerName').isString() && newData.child('targetName').isString() && newData.child('differenceReason').isString() && newData.child('response').isString() && newData.child('createdAt').isNumber()"
+            }
+          }
+        }
+      }
+    },
+
+    "forumPeerReviewAttempts": {
+      "$classId": {
+        ".read": "auth != null && (root.child('classes').child($classId).child('teacherId').val() === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$caseId": {
+          "$reviewerId": {
+            ".read": "auth != null && auth.uid === $reviewerId",
+            "$attemptId": {
+              "$targetId": {
+                ".write": "auth != null && auth.uid === $reviewerId && $targetId !== $reviewerId && !data.exists() && root.child('classMemberships').child($classId).child(auth.uid).exists() && root.child('progress').child($classId).child(auth.uid).child('modules').child('5').child('attemptId').val() === $attemptId && root.child('forumArgumentAttempts').child($classId).child($caseId).child($reviewerId).child($attemptId).exists() && (root.child('forumArgumentAttempts').child($classId).child($caseId).child($targetId).exists() || root.child('forumArguments').child($classId).child($caseId).child($targetId).exists() || root.child('forumPosts').child($classId).child($caseId).child($targetId).exists()) && (!newData.child('targetAttemptId').exists() || root.child('forumArgumentAttempts').child($classId).child($caseId).child($targetId).child(newData.child('targetAttemptId').val()).exists())",
+                ".validate": "newData.hasChildren(['reviewerId', 'reviewerName', 'attemptId', 'targetStudentId', 'targetName', 'differenceReason', 'response', 'createdAt']) && newData.child('reviewerId').val() === $reviewerId && newData.child('attemptId').val() === $attemptId && newData.child('targetStudentId').val() === $targetId && newData.child('reviewerName').isString() && newData.child('targetName').isString() && (!newData.child('targetAttemptId').exists() || newData.child('targetAttemptId').isString()) && newData.child('differenceReason').isString() && newData.child('response').isString() && newData.child('createdAt').isNumber()"
+              }
+            }
           }
         }
       }

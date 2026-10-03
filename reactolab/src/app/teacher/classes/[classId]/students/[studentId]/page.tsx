@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { listenGrades, readOnce, saveGrade } from "@/lib/db";
 import { buildModuleReport } from "@/lib/format";
 import { MODULES } from "@/lib/module-defs";
-import { MODULE_STATUS_LABEL } from "@/lib/progress";
+import { MODULE_STATUS_LABEL, normalizeProgress } from "@/lib/progress";
 import { P } from "@/lib/paths";
 import { reportedRateLabel } from "@/lib/runs";
 import { formatRelative } from "@/lib/utils";
@@ -48,7 +48,7 @@ export default function TeacherStudentDetail() {
       readOnce<Record<string, unknown>>(P.experiment(classId, studentId)),
     ]);
     setMember(m);
-    setProgress(p);
+    setProgress(p ? normalizeProgress(p) : null);
     setResponses(r ?? {});
     setExperiments(e ?? {});
     setLoading(false);
@@ -119,10 +119,10 @@ export default function TeacherStudentDetail() {
   return (
     <div className="space-y-5">
       <Link
-        href={`/teacher/classes/${classId}`}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-brand-700"
+        href={`/teacher/classes/${classId}/monitoring`}
+        className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
       >
-        <ArrowLeft className="h-4 w-4" /> Kembali ke Kelas
+        <ArrowLeft className="h-4 w-4" /> Kembali ke Monitoring Siswa
       </Link>
 
       <Card>
@@ -207,8 +207,8 @@ export default function TeacherStudentDetail() {
                     <p className="text-sm text-slate-400">Belum ada jawaban.</p>
                   ) : (
                     <div className="space-y-3">
-                      {report.items.map((item) => (
-                        <div key={item.label}>
+                      {report.items.map((item, itemIndex) => (
+                        <div key={`${item.label}-${itemIndex}`}>
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                             {item.label}
                           </p>

@@ -1,8 +1,9 @@
 import { MODULES, getModuleDef } from "./module-defs";
 import type { ModuleProgress, SectionProgress, StudentProgress } from "./types";
 
-export const CLOSING_MODULE_ID = 7;
-export const CLOSING_PREREQUISITE_IDS = [1, 2, 3, 4, 5, 6] as const;
+export const CLOSING_MODULE_ID = 6;
+export const DISCUSSION_MODULE_ID = 5;
+export const CLOSING_PREREQUISITE_IDS = [1, 2, 3, 4, 5] as const;
 
 export function closingPrerequisitesComplete(progress: StudentProgress): boolean {
   return CLOSING_PREREQUISITE_IDS.every(
@@ -21,6 +22,26 @@ export function lockedModuleProgress(moduleId: number): ModuleProgress {
     currentSection: null,
     completionPercent: 0,
     sections,
+  };
+}
+
+/** Fresh editable state for a module selected through Settings → Reset. */
+export function resetModuleProgress(
+  moduleId: number,
+  attemptId?: string
+): ModuleProgress {
+  const def = getModuleDef(moduleId);
+  if (!def) throw new Error("module-not-found");
+  const sections: Record<string, SectionProgress> = {};
+  for (const section of def.sections) {
+    sections[section.id] = { status: "locked" };
+  }
+  return {
+    status: "unlocked",
+    currentSection: null,
+    completionPercent: 0,
+    sections,
+    ...(moduleId === DISCUSSION_MODULE_ID && attemptId ? { attemptId } : {}),
   };
 }
 
@@ -50,46 +71,78 @@ export function buildProgressSkeleton(): StudentProgress {
 /** Remove legacy Module 0 data and make Module 1 the entry point. */
 export function normalizeProgress(progress: StudentProgress): StudentProgress {
   const skeleton = buildProgressSkeleton();
-  const modules = { ...skeleton.modules, ...(progress.modules ?? {}) };
+  const storedModules = progress.modules ?? {};
+  const hasLegacySevenModuleFlow = Boolean(storedModules["7"]);
+  const migratedModules = hasLegacySevenModuleFlow
+    ? {
+        ...storedModules,
+        // Konfirmasi Materi was removed from the student flow. The former
+        // Forum (M6) and Closing (M7) now occupy M5 and M6.
+        5: storedModules["6"] ?? skeleton.modules["5"],
+        6: storedModules["7"] ?? skeleton.modules["6"],
+      }
+    : storedModules;
+  const modules = { ...skeleton.modules, ...migratedModules };
   delete modules["0"];
+  delete modules["7"];
 
   const firstModule = modules["1"];
   if (firstModule?.status === "locked") {
     modules["1"] = { ...firstModule, status: "unlocked" };
   }
 
-  // Migrate the former stage-based Module 6 structure to the case-based flow.
+  // Migrate the former stage-based forum structure to the case-based flow.
   // Existing public CER/comments remain in their own database collections.
-  const module6 = modules["6"];
-  const hasLegacyModule6 = module6 && !module6.sections?.sectionCases;
-  if (hasLegacyModule6) {
-    const completed = module6.status === "completed";
-    const inProgress = module6.status === "in_progress";
-    const introCompleted = module6.sections?.section1?.status === "completed";
+  const discussionModule = modules[String(DISCUSSION_MODULE_ID)];
+  const hasLegacyDiscussion =
+    discussionModule && !discussionModule.sections?.sectionCases;
+  if (hasLegacyDiscussion) {
+    const completed = discussionModule.status === "completed";
+    const inProgress = discussionModule.status === "in_progress";
+    const introCompleted =
+      discussionModule.sections?.section1?.status === "completed";
     const activeSection = !introCompleted ? "section1" : "sectionCases";
-    modules["6"] = {
-      ...module6,
+    modules[String(DISCUSSION_MODULE_ID)] = {
+      ...discussionModule,
       currentSection: completed || !inProgress ? null : activeSection,
       completionPercent: completed ? 100 : introCompleted ? 33 : 0,
       sections: {
         section1: completed || introCompleted
-          ? { status: "completed", completedAt: module6.sections?.section1?.completedAt }
+          ? {
+              status: "completed",
+              completedAt: discussionModule.sections?.section1?.completedAt,
+            }
           : inProgress
-            ? { status: "active", startedAt: module6.startedAt }
+            ? { status: "active", startedAt: discussionModule.startedAt }
             : { status: "locked" },
         sectionCases: completed
-          ? { status: "completed", completedAt: module6.completedAt }
+          ? { status: "completed", completedAt: discussionModule.completedAt }
           : introCompleted
             ? { status: "active", startedAt: Date.now() }
             : { status: "locked" },
         sectionConclusion: completed
-          ? { status: "completed", completedAt: module6.completedAt }
+          ? { status: "completed", completedAt: discussionModule.completedAt }
           : { status: "locked" },
       },
     };
   }
 
-  // Module 7 is only valid while every prerequisite module remains complete.
+  // Removing the old student confirmation module must not leave the forum
+  // locked for learners who had already completed the four inquiry modules.
+  const inquiryModulesComplete = [1, 2, 3, 4].every(
+    (moduleId) => modules[String(moduleId)]?.status === "completed"
+  );
+  if (
+    inquiryModulesComplete &&
+    modules[String(DISCUSSION_MODULE_ID)]?.status === "locked"
+  ) {
+    modules[String(DISCUSSION_MODULE_ID)] = {
+      ...modules[String(DISCUSSION_MODULE_ID)],
+      status: "unlocked",
+    };
+  }
+
+  // The closing module is only valid while every prerequisite remains complete.
   const normalizedForPrerequisites = { ...progress, modules };
   if (!closingPrerequisitesComplete(normalizedForPrerequisites)) {
     modules[String(CLOSING_MODULE_ID)] = lockedModuleProgress(CLOSING_MODULE_ID);
@@ -100,20 +153,36 @@ export function normalizeProgress(progress: StudentProgress): StudentProgress {
     };
   }
 
-  const migratedCurrentSection =
-    progress.currentModule === 6 && hasLegacyModule6
-      ? modules["6"].currentSection
-      : progress.currentSection === undefined
-        ? null
-        : progress.currentSection;
+  const currentModule = hasLegacySevenModuleFlow
+    ? progress.currentModule >= 6
+      ? progress.currentModule - 1
+      : progress.currentModule === 5
+        ? DISCUSSION_MODULE_ID
+        : progress.currentModule
+    : progress.currentModule;
+  const migratedCurrentSection = hasLegacySevenModuleFlow
+    ? currentModule >= DISCUSSION_MODULE_ID
+      ? modules[String(currentModule)]?.currentSection ?? null
+      : progress.currentSection ?? null
+    : currentModule === DISCUSSION_MODULE_ID && hasLegacyDiscussion
+      ? modules[String(DISCUSSION_MODULE_ID)].currentSection
+      : progress.currentSection ?? null;
 
-  return {
+  const normalized: StudentProgress = {
     ...progress,
     currentModule:
-      progress.currentModule === 0 ? 1 : (progress.currentModule ?? 1),
+      currentModule === 0 ? 1 : (currentModule ?? 1),
     currentSection: progress.currentModule === 0 ? null : migratedCurrentSection,
     modules,
   };
+  normalized.overallPercent = overallPercent(normalized);
+  const courseComplete = MODULES.every(
+    (module) => modules[String(module.id)]?.status === "completed"
+  );
+  normalized.courseCompletedAt = courseComplete
+    ? (progress.courseCompletedAt ?? progress.lastSavedAt ?? progress.lastActivityAt)
+    : null;
+  return normalized;
 }
 
 export function moduleCompletionPercent(mod: ModuleProgress, moduleId: number): number {

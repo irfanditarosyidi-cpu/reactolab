@@ -27,7 +27,12 @@ import {
 } from "@/lib/db";
 import { MODULES } from "@/lib/module-defs";
 import { P } from "@/lib/paths";
-import { MODULE_STATUS_LABEL } from "@/lib/progress";
+import {
+  CLOSING_MODULE_ID,
+  DISCUSSION_MODULE_ID,
+  MODULE_STATUS_LABEL,
+  normalizeProgress,
+} from "@/lib/progress";
 import type { StudentProgress } from "@/lib/types";
 import { authErrorMessage } from "@/lib/utils";
 
@@ -55,7 +60,7 @@ export default function SettingsPanel({ showReset = false }: { showReset?: boole
   useEffect(() => {
     if (!showReset || !user || !profile?.activeClassId) return;
     return listen<StudentProgress>(P.progress(profile.activeClassId, user.uid), (value) => {
-      setProgress(value);
+      setProgress(value ? normalizeProgress(value) : null);
     });
   }, [showReset, user, profile?.activeClassId]);
 
@@ -316,10 +321,10 @@ export default function SettingsPanel({ showReset = false }: { showReset?: boole
           Progres, jawaban, dan data eksperimen <b>{selectedModule?.title}</b> akan
           dihapus. Progres modul lainnya tetap dipertahankan.
         </p>
-        {selectedModuleId && selectedModuleId <= 6 && (
+        {selectedModuleId && selectedModuleId < CLOSING_MODULE_ID && (
           <p className="mt-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">
-            Modul 7 (Penutup) akan dikunci kembali dan baru tersedia setelah Modul
-            1–6 kembali berstatus selesai seluruhnya.
+            Modul 6 (Penutup) akan dikunci kembali dan baru tersedia setelah Modul
+            1–5 kembali berstatus selesai seluruhnya.
           </p>
         )}
         {selectedModuleId && selectedModuleId <= 4 && (
@@ -328,10 +333,11 @@ export default function SettingsPanel({ showReset = false }: { showReset?: boole
             kembali lengkap.
           </p>
         )}
-        {selectedModuleId === 6 && (
+        {selectedModuleId === DISCUSSION_MODULE_ID && (
           <p className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-            CER dan komentar yang sudah dipublikasikan tetap tersimpan sebagai rekam
-            diskusi; hanya progres belajarnya yang diulang.
+            Argumen, CER historis, serta tanggapan yang sudah dipublikasikan tetap
+            tersimpan sebagai rekam diskusi. Percobaan baru akan menggunakan
+            lembar jawaban, argumen, dan tanggapan baru yang dapat diisi kembali.
           </p>
         )}
         <p className="mt-3 text-sm text-slate-600">

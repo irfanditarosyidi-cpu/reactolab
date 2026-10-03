@@ -18,20 +18,21 @@
 ## ✨ Fitur Utama
 
 **Siswa**
-- Modul 0–7, **satu modul = satu halaman**, section terbuka **berurutan** (tidak bisa lompat).
+- 6 modul (Modul 1–6), **satu modul = satu halaman**, section terbuka **berurutan** (tidak bisa lompat).
 - Workspace eksperimen terpadu: setup → simulasi makroskopik 2D → **kaca pembesar submikroskopik inline** (lensa ikut kursor + panel zoom) → tabel & grafik otomatis → representasi simbolik → explain 3 level.
 - 4 eksperimen virtual: Mg+HCl (konsentrasi), CaCO₃+HCl (luas permukaan), Na₂S₂O₃+HCl (suhu, + kurva Maxwell–Boltzmann), penguraian H₂O₂ (katalis, + diagram energi).
 - **Simpan & Keluar** kapan saja; **Lanjutkan Pembelajaran** kembali persis ke modul + section terakhir dengan jawaban terisi kembali.
 - Setelah modul selesai: **Lanjut ke Modul Selanjutnya** atau **Simpan & Selesai** (kembali ke dashboard, modul berikutnya tetap terbuka).
 - Finalisasi LKPD Modul 1–4 (jawaban terkunci) + unduh **PDF LKPD**.
-- Forum diskusi **CER** dengan **submit-to-reveal** (ditegakkan oleh security rules), komentar wajib, decision prompt, dan kesimpulan guru realtime.
+- Modul 5 **Aplikasi Konsep** dengan alur studi kasus enam tahap, argumen hipotesis submit-to-reveal, dua tanggapan beda penulis, keputusan berbasis bukti, dan kesimpulan guru realtime.
 - Latihan soal dengan pembahasan.
 
 **Guru**
 - Buat kelas + kode 6 karakter, regenerate kode (kode lama langsung hangus).
-- Dashboard ringkasan + **monitoring matriks M0–M7 realtime** (status, %, posisi section, aktivitas).
+- Dashboard ringkasan + **monitoring matriks M1–M6 realtime** (status, %, posisi section, aktivitas).
+- Bahan ajar **Konfirmasi Materi** interaktif: konsep laju reaksi, persamaan laju, dan teori tumbukan.
 - Detail jawaban & data eksperimen siswa (read-only).
-- Penyusunan studi kasus diskusi (link artikel + pertanyaan + decision prompt), publish/unpublish, pantau CER & tanggapan, publikasikan kesimpulan.
+- CRUD studi kasus Modul 5 (narasi, foto/caption, sumber, data/grafik, perspektif, prompt), urutan, publish/hide, arsip aman, pantau argumen/tanggapan, dan publikasikan kesimpulan.
 
 **Admin**
 - Statistik pengguna, pencarian, buat akun, aktif/nonaktifkan, hapus.
@@ -102,11 +103,11 @@ npm run typecheck  # pemeriksaan TypeScript
 1. **Admin**: login akun seed → `/admin/dashboard` → buat akun guru (atau pakai seed `--role teacher`).
 2. **Guru**: login → *Kelas* → **Buat Kelas** → salin kode 6 karakter.
 3. **Siswa**: daftar akun baru → dashboard → **Gabung Kelas** dengan kode → **Mulai Pembelajaran**.
-4. Kerjakan Modul 0 → Modul 1: isi orientasi → rumusan masalah → hipotesis → eksperimen (pilih ≥3 konsentrasi, jalankan semua, aktifkan 🔍 kaca pembesar) → uji hipotesis → kesimpulan.
+4. Kerjakan Modul 1: isi orientasi → rumusan masalah → hipotesis → eksperimen (pilih ≥3 konsentrasi, jalankan semua, aktifkan 🔍 kaca pembesar) → uji hipotesis → kesimpulan.
 5. Di tengah modul, uji **Simpan & Keluar** → logout → login → **Lanjutkan Pembelajaran** → halaman kembali ke section terakhir dengan jawaban utuh (PAT-08/09).
-6. **Guru**: buka *Monitoring* (lihat sel matriks berubah realtime) → *Forum Diskusi* → buat kasus + **Publikasikan**.
-7. **Siswa**: Modul 6 → baca artikel → kirim CER (feed teman baru terlihat setelah kirim) → beri tanggapan → decision.
-8. **Guru**: tulis & **Publikasikan** kesimpulan → siswa dapat menuntaskan Modul 6 → Modul 7 → **Simpan & Selesai Pembelajaran** (100%).
+6. **Guru**: buka *Monitoring* (lihat sel matriks berubah realtime) → *Forum Diskusi* → buat/ambil template kasus, lengkapi foto dan sumber, lalu **Publikasikan**.
+7. **Siswa**: Modul 5 → orientasi → rumusan masalah → hipotesis → bukti ilmiah/sosial-ekonomi → putusan hipotesis (feed teman baru terlihat setelah tersimpan) → tanggapi dua penulis berbeda → keputusan.
+8. **Guru**: tulis & **Publikasikan** kesimpulan → siswa dapat menuntaskan Modul 5 → Modul 6 → **Simpan & Selesai Pembelajaran** (100%).
 9. **Siswa/Guru**: unduh **PDF LKPD**.
 
 ---
@@ -118,7 +119,7 @@ src/
 ├── app/                       # routes (App Router)
 │   ├── (public)  /, /login, /register, /forgot-password, /reset-request
 │   ├── student/   dashboard, modules, modules/[moduleId], practice, settings
-│   ├── teacher/   dashboard, classes[…], monitoring, discussion, settings
+│   ├── teacher/   dashboard, teaching-materials, classes[…], monitoring, discussion, settings
 │   ├── admin/     dashboard, users[…], password-reset-requests, audit, settings
 │   └── api/admin/ users, users/[uid], reset-password   ← Firebase Admin SDK
 ├── components/
@@ -126,7 +127,7 @@ src/
 │   ├── experiment/ SimStage, sim-models, ParticleView (magnifier), DataPanel…
 │   ├── layout/ ui/ student/ teacher/ admin/ settings/
 ├── lib/
-│   ├── module-defs.ts  # konten Modul 0–7 (satu sumber kebenaran)
+│   ├── module-defs.ts  # konten enam modul siswa (satu sumber kebenaran)
 │   ├── progress.ts     # skeleton, unlock, persentase, resume target
 │   ├── db.ts paths.ts  # operasi & path RTDB
 │   ├── firebase/client.ts admin.ts
@@ -144,13 +145,16 @@ classes/{classId}                className, classCode, teacherId, status
 classCodes/{code}                → { classId }
 classMemberships/{classId}/{uid} joinedAt, name, email
 progress/{classId}/{uid}         currentModule, currentSection, overallPercent,
-                                 lastSavedAt, lkpdFinalizedAt, modules{0..7}.sections{}
+                                 lastSavedAt, lkpdFinalizedAt, modules{1..6}.sections{}
 responses/{classId}/{uid}/m{n}/{sectionId}   draft & jawaban per section
 experimentData/{classId}/{uid}/m{n}/runs/{param}
 lkpdSnapshots/{classId}/{uid}    snapshot final LKPD 1–4
 discussionCases/{classId}/{caseId}
-forumPosts/{classId}/{caseId}/{uid}          CER (immutable)
-forumComments/{classId}/{caseId}/{commentId}
+publishedDiscussionCases/{classId}/{caseId} proyeksi kasus terbit
+forumArguments/{classId}/{caseId}/{uid}      argumen hipotesis (immutable)
+forumPeerReviews/{classId}/{caseId}/{reviewerUid}/{targetUid}
+forumPosts/{classId}/{caseId}/{uid}          CER historis (tetap dibaca)
+forumComments/{classId}/{caseId}/{commentId} komentar historis
 discussionProgress/{classId}/{uid}
 teacherConclusions/{classId}
 passwordResetRequests/{reqId}
@@ -160,13 +164,14 @@ auditLogs/{logId}                (tulis: hanya server)
 **Poin keamanan pada rules:**
 - Registrasi klien dipaksa `role: student`; role/status tidak bisa diubah sendiri.
 - Guru hanya bisa membaca progress/jawaban kelas miliknya; **tidak bisa menulis** jawaban siswa (INV-08).
-- **Submit-to-reveal** forum ditegakkan di rules: feed `forumPosts` sebuah kasus hanya terbaca bila node CER milik pembaca sudah ada.
-- CER immutable (tidak bisa ditulis ulang), komentar hanya atas nama sendiri.
+- **Submit-to-reveal** forum ditegakkan di rules: feed argumen/CER sebuah kasus hanya terbaca setelah argumen baru atau CER historis milik pembaca ada.
+- Argumen baru dan CER historis immutable; ulasan teman hanya dapat ditulis oleh reviewer untuk penulis lain yang benar-benar memiliki post.
+- Siswa hanya dapat melakukan query `discussionCases` dengan filter `published == true`; draft dan arsip guru tidak dapat dibaca melalui API siswa.
 - `auditLogs` hanya bisa ditulis Admin SDK (server).
 
 ## 📝 Catatan & Batasan MVP
 
-- **Draft kasus diskusi**: siswa (anggota kelas) secara teknis dapat membaca node kasus yang belum dipublikasikan lewat API RTDB langsung (UI memfilternya). Jangan menaruh materi sensitif di draft, atau publikasikan saat siap saja.
+- **Template kasus** disimpan sebagai draft opsional. Publikasi ditolak sampai narasi, foto dan caption, sumber, perspektif, bukti ilmiah/sosial-ekonomi, dan prompt wajib lengkap.
 - **Metadata kelas** (`classes`) terbaca oleh semua pengguna login — diperlukan siswa untuk join/lihat nama kelas; jawaban tetap terlindungi per-kelas.
 - Analytics (`measurementId`) tidak diinisialisasi (tidak diperlukan; menjaga bundle kecil).
 - Siswa aktif pada **satu kelas** pada satu waktu (`activeClassId`); bergabung ke kelas lain memindahkan konteks aktif tanpa menghapus data lama.
@@ -181,7 +186,7 @@ auditLogs/{logId}                (tulis: hanya server)
 | Fitur admin error "FIREBASE_SERVICE_ACCOUNT belum di-set" | Env var kosong | Isi `.env.local` / env Vercel lalu redeploy |
 | Login berhasil tapi diarahkan keluar | Profil `users/{uid}` tidak ada | Buat via seed script / register ulang |
 | Forum "Menunggu Guru" terus | Kasus belum dipublikasikan | Guru → Forum Diskusi → Publikasikan |
-| Modul 6 tidak bisa selesai | Kesimpulan guru belum publish | Guru → Publikasikan kesimpulan |
+| Modul 5 tidak bisa selesai | Kesimpulan guru belum publish | Guru → Publikasikan kesimpulan |
 
 ---
 

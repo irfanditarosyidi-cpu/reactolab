@@ -1,6 +1,6 @@
 "use client";
 
-// Realtime monitoring matrix M0–M7 (PR-TCH-MON-001).
+// Realtime monitoring matrix for the six student modules (PR-TCH-MON-001).
 // Listeners attach to this class only and detach on unmount (PRD §32/§33).
 
 import Link from "next/link";
@@ -12,6 +12,7 @@ import { EmptyState, Spinner } from "@/components/ui/misc";
 import { listen } from "@/lib/db";
 import { MODULES } from "@/lib/module-defs";
 import { P } from "@/lib/paths";
+import { normalizeProgress } from "@/lib/progress";
 import { cn, formatRelative } from "@/lib/utils";
 import type { ClassInfo, ClassMembership, StudentProgress } from "@/lib/types";
 
@@ -36,7 +37,15 @@ export default function MonitoringPage() {
     );
     const u3 = listen<Record<string, StudentProgress>>(
       P.progressClass(classId),
-      (p) => setProgressAll(p ?? {})
+      (p) =>
+        setProgressAll(
+          Object.fromEntries(
+            Object.entries(p ?? {}).map(([uid, progress]) => [
+              uid,
+              normalizeProgress(progress),
+            ])
+          )
+        )
     );
     return () => {
       u1();
@@ -55,14 +64,17 @@ export default function MonitoringPage() {
     <div className="space-y-5">
       <div>
         <Link
-          href={`/teacher/classes/${classId}`}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-brand-700"
+          href="/teacher/classes"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
         >
-          <ArrowLeft className="h-4 w-4" /> {info?.className ?? "Kelas"}
+          <ArrowLeft className="h-4 w-4" /> Semua Kelas
         </Link>
         <h1 className="text-2xl font-black text-slate-900 mt-2">
-          Monitoring Realtime
+          Monitoring Siswa
         </h1>
+        <p className="mt-1 text-sm font-bold text-brand-700">
+          {info?.className ?? "Memuat kelas…"}
+        </p>
         <p className="text-sm text-slate-500 mt-1">
           Status modul setiap siswa diperbarui langsung saat mereka belajar.
         </p>

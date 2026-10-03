@@ -9,6 +9,7 @@ import ModuleGrid from "@/components/student/ModuleGrid";
 import { useAuth } from "@/lib/auth-context";
 import { listen, listenMyGrades } from "@/lib/db";
 import { P } from "@/lib/paths";
+import { normalizeProgress } from "@/lib/progress";
 import type { StudentProgress, TeacherGrade } from "@/lib/types";
 
 export default function StudentModulesPage() {
@@ -24,7 +25,7 @@ export default function StudentModulesPage() {
       return;
     }
     const unsub = listen<StudentProgress>(P.progress(classId, user.uid), (p) => {
-      setProgress(p);
+      setProgress(p ? normalizeProgress(p) : null);
       setLoaded(true);
     });
     return unsub;

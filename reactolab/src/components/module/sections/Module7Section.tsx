@@ -1,6 +1,6 @@
 "use client";
 
-// Module 7 — Penutup (PRD §25, PR-LEARN-SAVE-005).
+// Module 6 — Penutup (PRD §25, PR-LEARN-SAVE-005).
 
 import { useState } from "react";
 import { Download, PartyPopper } from "lucide-react";
@@ -21,7 +21,7 @@ export function M7Closing({ sec, readOnly }: SectionProps) {
   const completedCount = MODULES.filter(
     (m) => progress.modules[String(m.id)]?.status === "completed"
   ).length;
-  const isDone = progress.modules["7"]?.status === "completed";
+  const isDone = progress.modules["6"]?.status === "completed";
 
   return (
     <div className="text-center py-4">
@@ -34,7 +34,7 @@ export function M7Closing({ sec, readOnly }: SectionProps) {
       <p className="mt-2 text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
         Kamu telah menuntaskan seluruh penyelidikan laju reaksi: konsentrasi, luas
         permukaan, suhu, dan katalis — lengkap dengan analisis tiga level representasi
-        dan diskusi ilmiah CER. Kamu sudah belajar layaknya seorang ilmuwan!
+        dan aplikasi konsep melalui studi kasus. Kamu sudah belajar layaknya seorang ilmuwan!
       </p>
 
       <div className="mt-5 max-w-sm mx-auto">

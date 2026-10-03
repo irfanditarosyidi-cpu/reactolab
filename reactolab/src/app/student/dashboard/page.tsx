@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { joinClassByCode, listen, listenMyGrades, readOnce } from "@/lib/db";
 import { downloadLkpdPdf } from "@/lib/lkpd-pdf";
 import { P } from "@/lib/paths";
-import { resumeTarget } from "@/lib/progress";
+import { normalizeProgress, resumeTarget } from "@/lib/progress";
 import type { ClassInfo, StudentProgress, TeacherGrade } from "@/lib/types";
 
 export default function StudentDashboard() {
@@ -43,7 +43,7 @@ export default function StudentDashboard() {
     }
     setProgressLoaded(false);
     const unsub = listen<StudentProgress>(P.progress(classId, user.uid), (p) => {
-      setProgress(p);
+      setProgress(p ? normalizeProgress(p) : null);
       setProgressLoaded(true);
     });
     return unsub;

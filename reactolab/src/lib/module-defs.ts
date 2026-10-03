@@ -8,9 +8,6 @@ export type SectionType =
   | "experiment"
   | "hypotest"
   | "conclusion"
-  | "m5concept"
-  | "m5equation"
-  | "m5collision"
   | "m6intro"
   | "m6cases"
   | "m6articles"
@@ -318,26 +315,13 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 5,
-    title: "Konfirmasi Materi",
-    short: "Konfirmasi",
-    emoji: "📘",
-    description:
-      "Menguatkan pemahaman: konsep laju reaksi, persamaan laju, dan teori tumbukan.",
-    sections: [
-      { id: "section1", title: "Konsep Dasar Laju Reaksi", type: "m5concept" },
-      { id: "section2", title: "Persamaan Laju Reaksi", type: "m5equation" },
-      { id: "section3", title: "Teori Tumbukan", type: "m5collision" },
-    ],
-  },
-  {
-    id: 6,
-    title: "Forum Diskusi Ilmiah",
-    short: "Forum CER",
+    title: "Aplikasi Konsep",
+    short: "Studi Kasus",
     emoji: "💬",
     description:
-      "Berdiskusi ilmiah dengan format Claim–Evidence–Reasoning berdasarkan studi kasus dari gurumu.",
+      "Menerapkan konsep laju reaksi pada isu keselamatan industri dan sosial-ekonomi melalui studi kasus.",
     sections: [
-      { id: "section1", title: "Pembuka Diskusi", type: "m6intro" },
+      { id: "section1", title: "Forum Diskusi Berbasis Studi Kasus", type: "m6intro" },
       {
         id: "sectionCases",
         title: "Rangkaian Studi Kasus",
@@ -351,7 +335,7 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
-    id: 7,
+    id: 6,
     title: "Penutup",
     short: "Penutup",
     emoji: "🎉",
@@ -379,18 +363,24 @@ export function sectionDef(def: ModuleDef, sectionId: string): SectionDef | unde
   return def.sections.find((s) => s.id === sectionId);
 }
 
-// ===== Module 5 static content =====
+// ===== Teacher confirmation-material content =====
 
 export const M5_EQUATION_QUIZ = [
   {
     q: "Diketahui persamaan laju v = k[A]²[B]. Berapakah orde reaksi total?",
-    options: ["1", "2", "3", "0"],
+    options: ["1", "2", "3", "0", "4"],
     answer: 2,
     explain: "Orde total = jumlah pangkat = 2 + 1 = 3.",
   },
   {
     q: "Jika v = k[A]² dan konsentrasi A diperbesar 2 kali, laju reaksi menjadi…",
-    options: ["2 kali lebih besar", "4 kali lebih besar", "8 kali lebih besar", "tetap"],
+    options: [
+      "2 kali lebih besar",
+      "4 kali lebih besar",
+      "8 kali lebih besar",
+      "tetap",
+      "16 kali lebih besar",
+    ],
     answer: 1,
     explain: "v ∝ [A]², maka (2)² = 4 kali lebih besar.",
   },
@@ -401,6 +391,7 @@ export const M5_EQUATION_QUIZ = [
       "data percobaan (eksperimen)",
       "jumlah mol pereaksi",
       "wujud zat pereaksi",
+      "suhu awal pereaksi",
     ],
     answer: 1,
     explain: "Orde reaksi hanya dapat ditentukan dari data eksperimen, bukan koefisien reaksi.",
@@ -415,6 +406,7 @@ export const M5_COLLISION_QUIZ = [
       "jumlah partikel banyak",
       "wadah reaksi tertutup",
       "warna larutan pekat",
+      "tekanan sistem selalu rendah",
     ],
     answer: 0,
     explain:
@@ -427,6 +419,7 @@ export const M5_COLLISION_QUIZ = [
       "jumlah partikel bertambah",
       "energi aktivasi mengecil",
       "volume larutan mengecil",
+      "massa pereaksi bertambah",
     ],
     answer: 0,
     explain:
@@ -439,6 +432,7 @@ export const M5_COLLISION_QUIZ = [
       "menyediakan jalur reaksi lain dengan energi aktivasi lebih rendah",
       "menambah konsentrasi pereaksi",
       "memperbesar luas permukaan",
+      "meningkatkan energi aktivasi reaksi",
     ],
     answer: 1,
     explain:

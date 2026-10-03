@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Clapperboard, RotateCcw, Save } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -21,28 +21,18 @@ const ORIENTATION_MODULES = MODULES.filter(
 );
 
 export default function OrientationVideoManager({
-  classes,
+  classInfo,
 }: {
-  classes: TeacherClass[];
+  classInfo: TeacherClass;
 }) {
   const { toast } = useToast();
-  const [selectedClassId, setSelectedClassId] = useState(classes[0]?.classId ?? "");
+  const selectedClassId = classInfo.classId;
   const [moduleId, setModuleId] = useState(1);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!classes.some((item) => item.classId === selectedClassId)) {
-      setSelectedClassId(classes[0]?.classId ?? "");
-    }
-  }, [classes, selectedClassId]);
-
-  const selectedClass = useMemo(
-    () => classes.find((item) => item.classId === selectedClassId) ?? null,
-    [classes, selectedClassId]
-  );
-  const stored = selectedClass?.orientationMedia?.[String(moduleId)];
+  const stored = classInfo.orientationMedia?.[String(moduleId)];
 
   useEffect(() => {
     setYoutubeUrl(stored?.youtubeUrl ?? "");
@@ -100,153 +90,132 @@ export default function OrientationVideoManager({
         subtitle="Caption tampil sebagai informasi di bawah video tanpa kolom jawaban siswa."
       />
       <CardBody className="space-y-5">
-        {classes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-slate-700">Belum ada kelas.</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Buat kelas terlebih dahulu untuk mengatur video orientasi.
-            </p>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-slate-700">Pilih modul</p>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {ORIENTATION_MODULES.map((module) => {
+              const configured = Boolean(
+                classInfo.orientationMedia?.[String(module.id)]?.youtubeUrl
+              );
+              const active = module.id === moduleId;
+              return (
+                <button
+                  key={module.id}
+                  type="button"
+                  onClick={() => setModuleId(module.id)}
+                  className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                    active
+                      ? "border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-200"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/40"
+                  }`}
+                >
+                  <span className="block text-xs font-bold uppercase tracking-wide">
+                    Modul {module.id}
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm font-semibold">
+                    {module.short}
+                  </span>
+                  <span
+                    className={`mt-2 inline-block text-[11px] font-semibold ${
+                      configured ? "text-emerald-600" : "text-slate-400"
+                    }`}
+                  >
+                    {configured ? "Video terpasang" : "Konten bawaan"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <>
-            <div className="max-w-md">
-              <Label htmlFor="orientation-class">Kelas</Label>
-              <select
-                id="orientation-class"
-                value={selectedClassId}
-                onChange={(event) => setSelectedClassId(event.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="orientation-youtube">Link atau embed YouTube</Label>
+              <Input
+                id="orientation-youtube"
+                value={youtubeUrl}
+                onChange={(event) => setYoutubeUrl(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                aria-invalid={invalidUrl}
+              />
+              <p
+                className={`mt-1.5 text-xs ${
+                  invalidUrl ? "text-red-600" : "text-slate-500"
+                }`}
               >
-                {classes.map((item) => (
-                  <option key={item.classId} value={item.classId}>
-                    {item.className} ({item.classCode})
-                  </option>
-                ))}
-              </select>
+                {invalidUrl
+                  ? "Link tidak dikenali sebagai video YouTube."
+                  : "Bisa berupa link tontonan, link youtu.be, link embed, atau kode iframe YouTube."}
+              </p>
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-semibold text-slate-700">Pilih modul</p>
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                {ORIENTATION_MODULES.map((module) => {
-                  const configured = Boolean(
-                    selectedClass?.orientationMedia?.[String(module.id)]?.youtubeUrl
-                  );
-                  const active = module.id === moduleId;
-                  return (
-                    <button
-                      key={module.id}
-                      type="button"
-                      onClick={() => setModuleId(module.id)}
-                      className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                        active
-                          ? "border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-200"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50/40"
-                      }`}
-                    >
-                      <span className="block text-xs font-bold uppercase tracking-wide">
-                        Modul {module.id}
-                      </span>
-                      <span className="mt-0.5 block truncate text-sm font-semibold">
-                        {module.short}
-                      </span>
-                      <span
-                        className={`mt-2 inline-block text-[11px] font-semibold ${
-                          configured ? "text-emerald-600" : "text-slate-400"
-                        }`}
-                      >
-                        {configured ? "Video terpasang" : "Konten bawaan"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <Label htmlFor="orientation-caption">Caption orientasi</Label>
+              <Textarea
+                id="orientation-caption"
+                value={caption}
+                onChange={(event) => setCaption(event.target.value)}
+                rows={4}
+                maxLength={500}
+                placeholder="Tuliskan konteks atau petunjuk pengamatan untuk siswa…"
+              />
+              <p
+                className={`mt-1.5 text-right text-xs ${
+                  captionValid ? "text-slate-400" : "text-red-600"
+                }`}
+              >
+                {captionValid ? `${caption.length}/500` : "Caption wajib diisi"}
+              </p>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="orientation-youtube">Link atau embed YouTube</Label>
-                  <Input
-                    id="orientation-youtube"
-                    value={youtubeUrl}
-                    onChange={(event) => setYoutubeUrl(event.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    aria-invalid={invalidUrl}
-                  />
-                  <p className={`mt-1.5 text-xs ${invalidUrl ? "text-red-600" : "text-slate-500"}`}>
-                    {invalidUrl
-                      ? "Link tidak dikenali sebagai video YouTube."
-                      : "Bisa berupa link tontonan, link youtu.be, link embed, atau kode iframe YouTube."}
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="orientation-caption">Caption orientasi</Label>
-                  <Textarea
-                    id="orientation-caption"
-                    value={caption}
-                    onChange={(event) => setCaption(event.target.value)}
-                    rows={4}
-                    maxLength={500}
-                    placeholder="Tuliskan konteks atau petunjuk pengamatan untuk siswa…"
-                  />
-                  <p
-                    className={`mt-1.5 text-right text-xs ${
-                      captionValid ? "text-slate-400" : "text-red-600"
-                    }`}
-                  >
-                    {captionValid ? `${caption.length}/500` : "Caption wajib diisi"}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={handleSave}
-                    loading={busy}
-                    disabled={!embedUrl || !captionValid}
-                  >
-                    <Save className="h-4 w-4" /> Simpan video
-                  </Button>
-                  {stored ? (
-                    <Button
-                      variant="secondary"
-                      onClick={handleReset}
-                      disabled={busy}
-                    >
-                      <RotateCcw className="h-4 w-4" /> Konten bawaan
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2 text-sm font-semibold text-slate-700">Pratinjau siswa</p>
-                <div className="relative aspect-video rounded-xl border border-slate-200 bg-slate-950 shadow-sm">
-                  {embedUrl ? (
-                    <iframe
-                      key={embedUrl}
-                      src={embedUrl}
-                      title={`Pratinjau video orientasi Modul ${moduleId}`}
-                      className="pointer-events-auto absolute inset-0 z-10 block h-full w-full touch-manipulation rounded-xl border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
-                      Masukkan link YouTube untuk melihat pratinjau.
-                    </div>
-                  )}
-                </div>
-                {caption.trim() ? (
-                  <p className="mt-4 whitespace-pre-line rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm font-medium leading-relaxed text-slate-700">
-                    {caption.trim()}
-                  </p>
-                ) : null}
-              </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleSave}
+                loading={busy}
+                disabled={!embedUrl || !captionValid}
+              >
+                <Save className="h-4 w-4" /> Simpan video
+              </Button>
+              {stored ? (
+                <Button
+                  variant="secondary"
+                  onClick={handleReset}
+                  disabled={busy}
+                >
+                  <RotateCcw className="h-4 w-4" /> Konten bawaan
+                </Button>
+              ) : null}
             </div>
-          </>
-        )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-700">
+              Pratinjau siswa
+            </p>
+            <div className="relative aspect-video rounded-xl border border-slate-200 bg-slate-950 shadow-sm">
+              {embedUrl ? (
+                <iframe
+                  key={embedUrl}
+                  src={embedUrl}
+                  title={`Pratinjau video orientasi Modul ${moduleId}`}
+                  className="pointer-events-auto absolute inset-0 z-10 block h-full w-full touch-manipulation rounded-xl border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-400">
+                  Masukkan link YouTube untuk melihat pratinjau.
+                </div>
+              )}
+            </div>
+            {caption.trim() ? (
+              <p className="mt-4 whitespace-pre-line rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm font-medium leading-relaxed text-slate-700">
+                {caption.trim()}
+              </p>
+            ) : null}
+          </div>
+        </div>
       </CardBody>
     </Card>
   );

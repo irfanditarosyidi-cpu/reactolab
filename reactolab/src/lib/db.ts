@@ -14,20 +14,27 @@ import {
   update,
 } from "firebase/database";
 import { db } from "./firebase/client";
+import { createDiscussionAttemptId } from "./discussion";
+import { missingDefaultDiscussionCases } from "./discussion-templates";
 import { P } from "./paths";
 import { getModuleDef } from "./module-defs";
 import {
   buildProgressSkeleton,
   CLOSING_MODULE_ID,
+  DISCUSSION_MODULE_ID,
   lockedModuleProgress,
+  normalizeProgress,
   overallPercent,
+  resetModuleProgress,
 } from "./progress";
 import { generateClassCode } from "./utils";
 import type {
   ClassInfo,
   ClassMembership,
   DiscussionCase,
+  ForumArgument,
   ForumComment,
+  ForumPeerReview,
   ForumPost,
   OrientationMedia,
   StudentProgress,
@@ -99,6 +106,7 @@ export async function createClass(
   // class record, so the class must be created first.
   await set(ref(db, P.class(classId)), info);
   await set(ref(db, P.classCode(classCode)), { classId });
+  await ensureDefaultDiscussionCases(classId);
   return { classId, classCode };
 }
 
@@ -192,7 +200,8 @@ export async function getProgress(
   classId: string,
   uid: string
 ): Promise<StudentProgress | null> {
-  return readOnce<StudentProgress>(P.progress(classId, uid));
+  const progress = await readOnce<StudentProgress>(P.progress(classId, uid));
+  return progress ? normalizeProgress(progress) : null;
 }
 
 export async function ensureProgress(
@@ -233,19 +242,16 @@ export async function resetStudentModuleData(
   if (!current || current.status === "locked") throw new Error("module-locked");
 
   const now = Date.now();
-  const resetSections = Object.fromEntries(
-    def.sections.map((section) => [section.id, { status: "locked" as const }])
-  );
   const nextModules = {
     ...progress.modules,
-    [String(moduleId)]: {
-      status: "unlocked" as const,
-      currentSection: null,
-      completionPercent: 0,
-      sections: resetSections,
-    },
+    [String(moduleId)]: resetModuleProgress(
+      moduleId,
+      moduleId === DISCUSSION_MODULE_ID
+        ? createDiscussionAttemptId()
+        : undefined
+    ),
   };
-  if (moduleId >= 1 && moduleId <= 6) {
+  if (moduleId >= 1 && moduleId < CLOSING_MODULE_ID) {
     nextModules[String(CLOSING_MODULE_ID)] = lockedModuleProgress(
       CLOSING_MODULE_ID
     );
@@ -271,8 +277,10 @@ export async function resetStudentModuleData(
     [P.expRuns(classId, uid, moduleId)]: null,
   };
   if (moduleId >= 1 && moduleId <= 4) updates[P.lkpd(classId, uid)] = null;
-  if (moduleId === 6) updates[P.discussionProgress(classId, uid)] = null;
-  if (moduleId >= 1 && moduleId <= 6) {
+  if (moduleId === DISCUSSION_MODULE_ID) {
+    updates[P.discussionProgress(classId, uid)] = null;
+  }
+  if (moduleId >= 1 && moduleId < CLOSING_MODULE_ID) {
     updates[P.moduleResponses(classId, uid, CLOSING_MODULE_ID)] = null;
   }
 
@@ -282,19 +290,151 @@ export async function resetStudentModuleData(
 
 // ---------- discussion / forum ----------
 
+/**
+ * Seeds the two bundled Module 5 cases without changing an existing default,
+ * a teacher-edited copy, or a custom case with the same title.
+ */
+export async function ensureDefaultDiscussionCases(
+  classId: string
+): Promise<number> {
+  const existing = await readOnce<Record<string, DiscussionCase>>(P.cases(classId));
+  const missing = missingDefaultDiscussionCases(existing);
+  if (!missing.length) return 0;
+
+  const updates: Record<string, unknown> = {};
+  for (const discussionCase of missing) {
+    const { id, ...payload } = discussionCase;
+    updates[P.caseItem(classId, id)] = payload;
+    updates[P.publishedCase(classId, id)] = payload;
+  }
+  await updatePaths(updates);
+  return missing.length;
+}
+
 export function listenPublishedCases(
   classId: string,
   cb: (cases: Array<DiscussionCase & { id: string }>) => void
 ): () => void {
-  return onValue(ref(db, P.cases(classId)), (snap) => {
+  const publishedQuery = query(
+    ref(db, P.cases(classId)),
+    orderByChild("published"),
+    equalTo(true)
+  );
+  return onValue(publishedQuery, (snap) => {
     const out: Array<DiscussionCase & { id: string }> = [];
     snap.forEach((child) => {
       const v = child.val() as DiscussionCase;
-      if (v.published) out.push({ ...v, id: child.key as string });
+      if (v.published && !v.archivedAt)
+        out.push({ ...v, id: child.key as string });
     });
     out.sort((a, b) => (a.order ?? a.createdAt) - (b.order ?? b.createdAt));
     cb(out);
   });
+}
+
+/**
+ * Store the teacher-only source record and its student-readable published
+ * projection in one multi-location update. Drafts never enter the projection.
+ */
+export async function saveDiscussionCase(
+  classId: string,
+  value: DiscussionCase,
+  caseId?: string
+): Promise<string> {
+  const id = caseId ?? (push(ref(db, P.cases(classId))).key as string);
+  const { id: _ignoredId, ...caseValue } = value;
+  const payload = JSON.parse(
+    JSON.stringify({ ...caseValue, updatedAt: Date.now() })
+  ) as DiscussionCase;
+  const visible = payload.published && !payload.archivedAt;
+  await updatePaths({
+    [P.caseItem(classId, id)]: payload,
+    [P.publishedCase(classId, id)]: visible ? payload : null,
+  });
+  return id;
+}
+
+/** Backfills/repairs the published projection without touching responses. */
+export async function syncPublishedCaseProjection(
+  classId: string,
+  cases: Array<DiscussionCase & { id: string }>
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  for (const discussionCase of cases) {
+    const { id, ...payload } = discussionCase;
+    updates[P.publishedCase(classId, id)] =
+      discussionCase.published && !discussionCase.archivedAt ? payload : null;
+  }
+  if (Object.keys(updates).length) await updatePaths(updates);
+}
+
+export async function discussionCaseHasResponses(
+  classId: string,
+  caseId: string
+): Promise<boolean> {
+  const [
+    legacyPosts,
+    argumentsValue,
+    argumentAttempts,
+    comments,
+    peerReviews,
+    peerReviewAttempts,
+    progress,
+    responses,
+  ] = await Promise.all([
+      readOnce<Record<string, unknown>>(P.posts(classId, caseId)),
+      readOnce<Record<string, unknown>>(P.arguments(classId, caseId)),
+      readOnce<Record<string, unknown>>(P.argumentAttempts(classId, caseId)),
+      readOnce<Record<string, unknown>>(P.comments(classId, caseId)),
+      readOnce<Record<string, unknown>>(P.peerReviews(classId, caseId)),
+      readOnce<Record<string, unknown>>(P.peerReviewAttempts(classId, caseId)),
+      readOnce<Record<string, Record<string, unknown>>>(
+        `discussionProgress/${classId}`
+      ),
+      readOnce<Record<string, Record<string, unknown>>>(`responses/${classId}`),
+    ]);
+  const hasDraftResponse = Object.values(responses ?? {}).some((student) => {
+    const m5 = student?.m5 as Record<string, unknown> | undefined;
+    const m6 = student?.m6 as Record<string, unknown> | undefined;
+    const currentCases = m5?.sectionCases as Record<string, unknown> | undefined;
+    const legacyCases = m6?.sectionCases as Record<string, unknown> | undefined;
+    return Boolean(currentCases?.[caseId] || legacyCases?.[caseId]);
+  });
+  return Boolean(
+    legacyPosts ||
+      argumentsValue ||
+      argumentAttempts ||
+      comments ||
+      peerReviews ||
+      peerReviewAttempts ||
+      hasDraftResponse ||
+      Object.values(progress ?? {}).some((student) => Boolean(student?.[caseId]))
+  );
+}
+
+export async function removeOrArchiveDiscussionCase(
+  classId: string,
+  discussionCase: DiscussionCase & { id: string }
+): Promise<"deleted" | "archived"> {
+  const hasResponses = await discussionCaseHasResponses(classId, discussionCase.id);
+  if (hasResponses) {
+    await saveDiscussionCase(
+      classId,
+      {
+        ...discussionCase,
+        published: false,
+        archivedAt: discussionCase.archivedAt ?? Date.now(),
+        archivedReason: "Diarsipkan karena kasus sudah memiliki respons siswa.",
+      },
+      discussionCase.id
+    );
+    return "archived";
+  }
+  await updatePaths({
+    [P.caseItem(classId, discussionCase.id)]: null,
+    [P.publishedCase(classId, discussionCase.id)]: null,
+  });
+  return "deleted";
 }
 
 export function listenAllCases(
@@ -323,6 +463,35 @@ export async function submitCER(
   });
 }
 
+export async function submitForumArgument(
+  classId: string,
+  caseId: string,
+  uid: string,
+  argument: ForumArgument
+): Promise<void> {
+  await updatePaths({
+    [P.argument(classId, caseId, uid)]: argument,
+    [`${P.discussionProgress(classId, uid)}/${caseId}/argumentSubmittedAt`]:
+      argument.submittedAt,
+  });
+}
+
+export async function submitForumArgumentAttempt(
+  classId: string,
+  caseId: string,
+  uid: string,
+  attemptId: string,
+  argument: ForumArgument
+): Promise<void> {
+  const payload: ForumArgument = { ...argument, attemptId };
+  await updatePaths({
+    [P.argumentAttempt(classId, caseId, uid, attemptId)]: payload,
+    [`${P.discussionProgress(classId, uid)}/${caseId}/argumentSubmittedAt`]:
+      payload.submittedAt,
+    [`${P.discussionProgress(classId, uid)}/${caseId}/attemptId`]: attemptId,
+  });
+}
+
 export function listenPosts(
   classId: string,
   caseId: string,
@@ -340,6 +509,120 @@ export function listenPosts(
       cb(out);
     },
     () => onDenied?.()
+  );
+}
+
+export function listenArguments(
+  classId: string,
+  caseId: string,
+  cb: (posts: Array<ForumArgument & { uid: string }>) => void,
+  onDenied?: () => void
+): () => void {
+  return onValue(
+    ref(db, P.arguments(classId, caseId)),
+    (snap) => {
+      const out: Array<ForumArgument & { uid: string }> = [];
+      snap.forEach((child) => {
+        out.push({ ...(child.val() as ForumArgument), uid: child.key as string });
+      });
+      out.sort((a, b) => a.submittedAt - b.submittedAt);
+      cb(out);
+    },
+    () => onDenied?.()
+  );
+}
+
+export function listenArgumentAttempts(
+  classId: string,
+  caseId: string,
+  cb: (
+    posts: Array<ForumArgument & { uid: string; attemptId: string }>
+  ) => void,
+  onDenied?: () => void
+): () => void {
+  return onValue(
+    ref(db, P.argumentAttempts(classId, caseId)),
+    (snap) => {
+      const out: Array<ForumArgument & { uid: string; attemptId: string }> = [];
+      snap.forEach((studentSnap) => {
+        studentSnap.forEach((attemptSnap) => {
+          const argument = attemptSnap.val() as ForumArgument;
+          out.push({
+            ...argument,
+            uid: studentSnap.key as string,
+            attemptId: argument.attemptId ?? (attemptSnap.key as string),
+          });
+        });
+      });
+      out.sort((a, b) => a.submittedAt - b.submittedAt);
+      cb(out);
+    },
+    () => onDenied?.()
+  );
+}
+
+export async function submitPeerReview(
+  classId: string,
+  caseId: string,
+  review: ForumPeerReview
+): Promise<void> {
+  await updatePaths({
+    [P.peerReview(classId, caseId, review.reviewerId, review.targetStudentId)]:
+      review,
+    [`${P.discussionProgress(classId, review.reviewerId)}/${caseId}/reviewedPeers/${review.targetStudentId}`]:
+      review.createdAt,
+  });
+}
+
+export async function submitPeerReviewAttempt(
+  classId: string,
+  caseId: string,
+  attemptId: string,
+  review: ForumPeerReview
+): Promise<void> {
+  const payload: ForumPeerReview = { ...review, attemptId };
+  await updatePaths({
+    [P.peerReviewAttempt(
+      classId,
+      caseId,
+      review.reviewerId,
+      attemptId,
+      review.targetStudentId
+    )]: payload,
+    [`${P.discussionProgress(classId, review.reviewerId)}/${caseId}/reviewedPeers/${review.targetStudentId}`]:
+      payload.createdAt,
+    [`${P.discussionProgress(classId, review.reviewerId)}/${caseId}/attemptId`]:
+      attemptId,
+  });
+}
+
+export function listenPeerReviews(
+  classId: string,
+  caseId: string,
+  reviewerId: string,
+  cb: (reviews: Record<string, ForumPeerReview>) => void
+): () => void {
+  return onValue(
+    ref(db, P.peerReviewsByStudent(classId, caseId, reviewerId)),
+    (snap) => cb(snap.exists() ? (snap.val() as Record<string, ForumPeerReview>) : {})
+  );
+}
+
+export function listenPeerReviewAttempts(
+  classId: string,
+  caseId: string,
+  reviewerId: string,
+  attemptId: string,
+  cb: (reviews: Record<string, ForumPeerReview>) => void
+): () => void {
+  return onValue(
+    ref(db, P.peerReviewsByAttempt(classId, caseId, reviewerId, attemptId)),
+    (snap) =>
+      cb(
+        snap.exists()
+          ? (snap.val() as Record<string, ForumPeerReview>)
+          : {}
+      )
   );
 }
 
