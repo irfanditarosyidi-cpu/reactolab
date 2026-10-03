@@ -28,8 +28,12 @@ export default function ResetRequestPage() {
     try {
       await createResetRequest(email, name, message);
       setDone(true);
-    } catch {
-      setErr("Gagal mengirim permintaan. Coba lagi.");
+    } catch (error) {
+      setErr(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengirim permintaan. Coba lagi."
+      );
     } finally {
       setBusy(false);
     }

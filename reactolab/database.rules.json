@@ -228,8 +228,9 @@
 
     "passwordResetRequests": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      ".indexOn": ["email"],
       "$reqId": {
-        ".write": "(!data.exists() && newData.child('status').val() === 'pending' && newData.child('email').isString() && newData.child('createdAt').isNumber()) || (auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
       }
     },
 

@@ -705,19 +705,22 @@ export function listenMyGrades(
   );
 }
 
-// ---------- password reset requests (public create) ----------
+// ---------- password reset requests (verified by the server) ----------
 
 export async function createResetRequest(
   email: string,
   name: string,
   message: string
 ): Promise<void> {
-  const r = push(ref(db, P.resetRequests));
-  await set(r, {
-    email: email.trim().toLowerCase(),
-    name: name.trim(),
-    message: message.trim(),
-    status: "pending",
-    createdAt: Date.now(),
+  const response = await fetch("/api/password-reset-requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name, message }),
   });
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: string }
+    | null;
+  if (!response.ok) {
+    throw new Error(payload?.error ?? "Gagal mengirim permintaan reset password.");
+  }
 }

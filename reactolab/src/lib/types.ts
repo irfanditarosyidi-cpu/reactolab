@@ -319,6 +319,7 @@ export interface PracticeConfig {
 
 export interface PasswordResetRequest {
   id?: string;
+  uid?: string;
   email: string;
   name?: string;
   message?: string;
